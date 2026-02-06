@@ -1,10 +1,42 @@
-| Skill | 核心功能 |
-|:---|:---|
-| `china-a-stock` | A股 K线、实时快照 |
-| `hk-stock` | 港股行情 (akshare / yfinance) |
-| `us-stock` | 美股行情、基本面 (yfinance) |
-| `fund` | 基金净值、ETF 行情 |
-| `shanghai-gold` | 沪金现货行情 |
-| `london-gold` | COMEX 黄金、XAU/USD |
-| `news` | 财经新闻、市场情绪 (akshare / AV) |
-| `teams-attendance` | Teams 考勤与工时统计 |
+# LLM Skills
+
+本项目汇集了专为 LLM Agent 设计的工具调用技能（Skills），皆在增强 AI 智能体的垂直领域能力，涵盖金融数据获取与办公自动化等场景。
+
+## 📁 技能列表
+
+### 📈 金融数据 (Finance Data)
+
+基于 `akshare` 和 `yfinance` 等数据源，提供全面的市场行情数据支持：
+
+*   **A股 (China A-Stock)**: 获取中国 A 股历史行情与实时数据。
+*   **港股 (HK Stock)**: 获取香港市场股票数据。
+*   **美股 (US Stock)**: 获取美国市场股票数据。
+*   **基金 (Fund)**: 获取公募基金产品数据与净值信息。
+*   **黄金 (Gold)**:
+    *   **上海黄金**: 获取上海黄金交易所现货数据。
+    *   **伦敦金**: 获取国际现货黄金（伦敦金）行情数据。
+*   **财经新闻 (News)**: 实时抓取并聚合全球财经新闻资讯。
+
+### 🏢 办公自动化 (Office Automation)
+
+*   **Teams 考勤 (Teams Attendance)**: 自动化处理 Teams 考勤与工时统计生成。
+
+## 🚀 使用指南
+
+每个技能文件夹下均包含独立的 `SKILL.md` 文件，详细说明了该技能的：
+- **功能描述** (Description)
+- **输入参数** (Input Parameters)
+- **依赖配置** (Dependencies)
+- **使用示例** (Usage Examples)
+
+请查阅具体技能目录下的文档以获取更详细的集成指引。
+
+## 🛠️ 项目结构
+
+```
+.agent/skills/
+├── finance-data-*/       # 金融相关技能集
+└── teams-attendance/     # 办公效率技能集
+data/                     # 本地数据存储目录（已添加至 .gitignore）
+openspec/                 # 开放规范文档
+```
