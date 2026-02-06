@@ -12,7 +12,7 @@ import os
 
 
 # Alpha Vantage API 配置
-ALPHAVANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "OPQQYI2WM3MSIN3K")
+ALPHAVANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "")
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
 
 # 支持的板块关键词映射

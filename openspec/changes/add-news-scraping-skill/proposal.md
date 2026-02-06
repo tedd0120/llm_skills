@@ -29,7 +29,7 @@
 ## 影响
 - 受影响规范：无（新增功能）
 - 受影响代码：`.agent/skills/` 目录（新增 skill）
-- 外部依赖：Alpha Vantage API Key `OPQQYI2WM3MSIN3K`
+- 外部依赖：Alpha Vantage API Key `Env Var: ALPHAVANTAGE_API_KEY`
 
 > [!CAUTION]
 > Alpha Vantage 免费账户每日仅有 25 次 API 调用额度，测试时需谨慎使用。
