@@ -15,7 +15,7 @@
 *   **黄金 (Gold)**:
     *   **上海黄金** [`finance-data-shanghai-gold`]: 获取上海黄金交易所现货数据。
     *   **伦敦金** [`finance-data-london-gold`]: 获取国际现货黄金（伦敦金）行情数据。
-*   **财经新闻 (News)** [`finance-data-news`]: 实时抓取并聚合全球财经新闻资讯。
+*   **财经新闻 (News)** [`finance-data-news`]: 抓取全球财经新闻，支持个股情绪分析、话题标签、涨跌幅排行和内部人交易追踪。
 
 ### 🏢 办公自动化 (Office Automation)
 

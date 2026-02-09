@@ -3,12 +3,17 @@
 支持 akshare（国内）和 Alpha Vantage（国际）两个数据源
 """
 
-import akshare as ak
+try:
+    import akshare as ak
+except ImportError:
+    ak = None
+
 import pandas as pd
 import requests
 from typing import Optional, Literal
 from datetime import datetime
 import os
+import json
 
 
 # Alpha Vantage API 配置
@@ -57,6 +62,112 @@ def is_a_stock_code(ticker: str) -> bool:
     return ticker.isdigit() and len(ticker) == 6
 
 
+def _check_api_key() -> bool:
+    """
+    检查 Alpha Vantage API Key 是否已设置
+    
+    Returns:
+        bool: API Key 是否有效
+    """
+    if not ALPHAVANTAGE_API_KEY:
+        print("❌ 错误: 未设置 ALPHAVANTAGE_API_KEY 环境变量")
+        print("   请设置环境变量后重试: export ALPHAVANTAGE_API_KEY=your_key")
+        return False
+    return True
+
+
+def fetch_top_movers() -> dict:
+    """
+    获取美股涨跌幅和成交量排行
+    
+    Returns:
+        dict with keys: 'gainers', 'losers', 'most_actively_traded'
+        每个值为 DataFrame
+    """
+    if not _check_api_key():
+        return {"gainers": pd.DataFrame(), "losers": pd.DataFrame(), "most_actively_traded": pd.DataFrame()}
+    
+    print(f"⚠️ Alpha Vantage API 调用提醒：每日免费额度仅 25 次")
+    
+    params = {
+        "function": "TOP_GAINERS_LOSERS",
+        "apikey": ALPHAVANTAGE_API_KEY
+    }
+    
+    try:
+        response = requests.get(ALPHAVANTAGE_BASE_URL, params=params)
+        data = response.json()
+        
+        if "top_gainers" not in data:
+            print(f"Alpha Vantage API 返回错误: {data.get('Note', data.get('Information', data))}")
+            return {"gainers": pd.DataFrame(), "losers": pd.DataFrame(), "most_actively_traded": pd.DataFrame()}
+        
+        result = {
+            "gainers": pd.DataFrame(data.get("top_gainers", [])),
+            "losers": pd.DataFrame(data.get("top_losers", [])),
+            "most_actively_traded": pd.DataFrame(data.get("most_actively_traded", []))
+        }
+        
+        print(f"✓ 成功获取美股涨跌幅排行")
+        return result
+        
+    except Exception as e:
+        print(f"Alpha Vantage API 调用失败: {e}")
+        return {"gainers": pd.DataFrame(), "losers": pd.DataFrame(), "most_actively_traded": pd.DataFrame()}
+
+
+def fetch_insider_transactions(symbol: str) -> pd.DataFrame:
+    """
+    获取公司内部人士交易记录
+    
+    Args:
+        symbol: 股票代码，如 "IBM"
+    
+    Returns:
+        DataFrame 包含内部人交易详情
+    """
+    if not _check_api_key():
+        return pd.DataFrame()
+    
+    print(f"⚠️ Alpha Vantage API 调用提醒：每日免费额度仅 25 次")
+    
+    params = {
+        "function": "INSIDER_TRANSACTIONS",
+        "symbol": symbol,
+        "apikey": ALPHAVANTAGE_API_KEY
+    }
+    
+    try:
+        response = requests.get(ALPHAVANTAGE_BASE_URL, params=params)
+        data = response.json()
+        
+        if "data" not in data:
+            print(f"Alpha Vantage API 返回错误: {data.get('Note', data.get('Information', data))}")
+            return pd.DataFrame()
+        
+        transactions = data.get("data", [])
+        
+        # 解析交易记录
+        records = []
+        for tx in transactions:
+            records.append({
+                "transaction_date": tx.get("transaction_date", ""),
+                "insider_name": tx.get("executive", ""),
+                "insider_title": tx.get("executive_title", ""),
+                "transaction_type": tx.get("acquisition_or_disposal", ""),
+                "shares": tx.get("shares", 0),
+                "value": tx.get("share_price", 0)
+            })
+        
+        df = pd.DataFrame(records)
+        print(f"✓ 成功获取 {symbol} 内部人交易记录，共 {len(df)} 条")
+        return df
+        
+    except Exception as e:
+        print(f"Alpha Vantage API 调用失败: {e}")
+        return pd.DataFrame()
+
+
 def fetch_stock_news_akshare(ticker: str) -> pd.DataFrame:
     """
     使用 akshare 抓取 A股个股新闻
@@ -67,6 +178,11 @@ def fetch_stock_news_akshare(ticker: str) -> pd.DataFrame:
     Returns:
         DataFrame 包含新闻标题、内容、发布时间、链接
     """
+    if ak is None:
+        print("❌ 错误: 未安装 akshare 库，无法抓取 A股新闻")
+        print("   请运行: pip install akshare")
+        return pd.DataFrame()
+        
     try:
         df = ak.stock_news_em(symbol=ticker)
         # 统一列名
@@ -93,7 +209,8 @@ def fetch_news_alphavantage(
     time_from: Optional[str] = None,
     time_to: Optional[str] = None,
     sort: str = "LATEST",
-    limit: int = 50
+    limit: int = 50,
+    target_ticker: Optional[str] = None
 ) -> pd.DataFrame:
     """
     使用 Alpha Vantage API 抓取新闻
@@ -105,6 +222,7 @@ def fetch_news_alphavantage(
         time_to: 结束时间 YYYYMMDDTHHMM
         sort: 排序方式 LATEST/EARLIEST/RELEVANCE
         limit: 返回条数，默认50，最大1000
+        target_ticker: 目标股票代码，用于提取该股票的专属情绪
     
     Returns:
         DataFrame 包含新闻和情绪分析数据
@@ -140,6 +258,23 @@ def fetch_news_alphavantage(
         # 解析新闻数据
         news_list = []
         for article in articles:
+            # 解析 ticker_sentiment
+            ticker_sentiments = article.get("ticker_sentiment", [])
+            
+            # 提取目标股票的专属情绪
+            target_sentiment = None
+            target_label = None
+            if target_ticker:
+                for ts in ticker_sentiments:
+                    if ts.get("ticker") == target_ticker:
+                        target_sentiment = float(ts.get("ticker_sentiment_score", 0))
+                        target_label = ts.get("ticker_sentiment_label", "")
+                        break
+            
+            # 解析 topics
+            article_topics = article.get("topics", [])
+            topics_str = ",".join([f"{t['topic']}:{t['relevance_score']}" for t in article_topics])
+            
             news_item = {
                 "title": article.get("title", ""),
                 "summary": article.get("summary", ""),
@@ -147,7 +282,12 @@ def fetch_news_alphavantage(
                 "url": article.get("url", ""),
                 "published_time": article.get("time_published", ""),
                 "sentiment_score": article.get("overall_sentiment_score", None),
-                "tickers": ",".join([t["ticker"] for t in article.get("ticker_sentiment", [])])
+                "sentiment_label": article.get("overall_sentiment_label", ""),
+                "tickers": ",".join([t["ticker"] for t in ticker_sentiments]),
+                "ticker_sentiments": json.dumps(ticker_sentiments),
+                "topics": topics_str,
+                "target_ticker_sentiment": target_sentiment,
+                "target_ticker_label": target_label
             }
             news_list.append(news_item)
         
@@ -165,7 +305,10 @@ def fetch_news(
     keyword: Optional[str] = None,
     ticker: Optional[str] = None,
     source: Literal["auto", "akshare", "alphavantage"] = "auto",
-    limit: int = 50
+    limit: int = 50,
+    time_from: Optional[str] = None,
+    time_to: Optional[str] = None,
+    sort: Literal["LATEST", "EARLIEST", "RELEVANCE"] = "LATEST"
 ) -> pd.DataFrame:
     """
     统一新闻抓取接口
@@ -182,6 +325,9 @@ def fetch_news(
             - "akshare": 强制使用akshare
             - "alphavantage": 强制使用Alpha Vantage
         limit: 返回条数限制
+        time_from: 开始时间，格式 YYYYMMDDTHHMM（仅 Alpha Vantage）
+        time_to: 结束时间，格式 YYYYMMDDTHHMM（仅 Alpha Vantage）
+        sort: 排序方式 LATEST/EARLIEST/RELEVANCE（仅 Alpha Vantage）
     
     Returns:
         DataFrame 包含统一格式的新闻数据
@@ -191,7 +337,10 @@ def fetch_news(
     if query_type == "global":
         return fetch_news_alphavantage(
             topics="economy_macro,financial_markets",
-            limit=limit
+            limit=limit,
+            time_from=time_from,
+            time_to=time_to,
+            sort=sort
         )
     
     # 板块关键词新闻
@@ -202,7 +351,13 @@ def fetch_news(
         
         # 转换中文关键词
         topic = TOPIC_MAPPING.get(keyword, keyword)
-        return fetch_news_alphavantage(topics=topic, limit=limit)
+        return fetch_news_alphavantage(
+            topics=topic,
+            limit=limit,
+            time_from=time_from,
+            time_to=time_to,
+            sort=sort
+        )
     
     # 个股新闻
     if query_type == "ticker":
@@ -218,9 +373,18 @@ def fetch_news(
                 source = "alphavantage"
         
         if source == "akshare":
+            if time_from or time_to:
+                print("⚠️ 警告: akshare 数据源不支持时间范围筛选，参数将被忽略")
             return fetch_stock_news_akshare(ticker)
         else:
-            return fetch_news_alphavantage(tickers=ticker, limit=limit)
+            return fetch_news_alphavantage(
+                tickers=ticker,
+                limit=limit,
+                time_from=time_from,
+                time_to=time_to,
+                sort=sort,
+                target_ticker=ticker
+            )
     
     print(f"错误: 不支持的查询类型 {query_type}")
     return pd.DataFrame()
