@@ -8,18 +8,18 @@
 
 基于 `akshare` 和 `yfinance` 等数据源，提供全面的市场行情数据支持：
 
-*   **A股 (China A-Stock)**: 获取中国 A 股历史行情与实时数据。
-*   **港股 (HK Stock)**: 获取香港市场股票数据。
-*   **美股 (US Stock)**: 获取美国市场股票数据。
-*   **基金 (Fund)**: 获取公募基金产品数据与净值信息。
+*   **A股 (China A-Stock)** [`finance-data-china-a-stock`]: 获取中国 A 股历史行情与实时数据。
+*   **港股 (HK Stock)** [`finance-data-hk-stock`]: 获取香港市场股票数据。
+*   **美股 (US Stock)** [`finance-data-us-stock`]: 获取美国市场股票数据。
+*   **基金 (Fund)** [`finance-data-fund`]: 获取公募基金产品数据与净值信息。
 *   **黄金 (Gold)**:
-    *   **上海黄金**: 获取上海黄金交易所现货数据。
-    *   **伦敦金**: 获取国际现货黄金（伦敦金）行情数据。
-*   **财经新闻 (News)**: 实时抓取并聚合全球财经新闻资讯。
+    *   **上海黄金** [`finance-data-shanghai-gold`]: 获取上海黄金交易所现货数据。
+    *   **伦敦金** [`finance-data-london-gold`]: 获取国际现货黄金（伦敦金）行情数据。
+*   **财经新闻 (News)** [`finance-data-news`]: 实时抓取并聚合全球财经新闻资讯。
 
 ### 🏢 办公自动化 (Office Automation)
 
-*   **Teams 考勤 (Teams Attendance)**: 自动化处理 Teams 考勤与工时统计生成。
+*   **Teams 考勤 (Teams Attendance)** [`teams-attendance`]: 自动化处理 Teams 考勤与工时统计生成。
 
 ## 🚀 使用指南
 
