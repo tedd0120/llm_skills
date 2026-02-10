@@ -11,14 +11,21 @@ import json
 import argparse
 import requests
 from pathlib import Path
+from datetime import datetime
 from typing import Optional
 from dotenv import load_dotenv
+
+try:
+    from .generate_org_tree_html import render_org_tree_html
+except ImportError:
+    from generate_org_tree_html import render_org_tree_html
 
 # 加载环境变量
 load_dotenv(Path(__file__).parent.parent.parent.parent.parent / '.env')
 
 TEAMS_AUTHORIZATION = os.getenv('TEAMS_AUTHORIZATION')
 TEAMS_GROUP_CODES = os.getenv('TEAMS_GROUP_CODES', '')
+DEFAULT_LATEST_HTML_PATH = 'data/latest_group_members_org_tree.html'
 
 
 def _check_env(authorization: Optional[str] = None):
@@ -183,12 +190,25 @@ def _save_members(members: list[dict], save_path: str):
     print(f"成员数据已保存: {path.as_posix()}")
 
 
+def _resolve_html_path(save_path: Optional[str] = None) -> str:
+    """
+    计算组织树 HTML 输出路径
+    """
+    if not save_path:
+        return DEFAULT_LATEST_HTML_PATH
+
+    json_path = Path(save_path)
+    stem = json_path.stem if json_path.suffix else json_path.name
+    return (json_path.parent / f"{stem}_org_tree.html").as_posix()
+
+
 def fetch_group_members(
     group_code: str,
     authorization: Optional[str] = None,
     verbose: bool = True,
     save_path: Optional[str] = None,
-    fill_virtual_superiors: bool = True
+    fill_virtual_superiors: bool = True,
+    generate_html: bool = True
 ) -> list[dict]:
     """
     获取指定群组的成员列表并解析详细信息
@@ -199,6 +219,7 @@ def fetch_group_members(
         verbose: 是否打印结果信息
         save_path: 保存路径（可选），传入时保存为 JSON
         fill_virtual_superiors: 是否补齐虚拟上级节点，默认 True
+        generate_html: 是否在抓取后生成组织树 HTML，默认 True
 
     Returns:
         解析后的成员信息字典列表，每个字典包含：
@@ -264,6 +285,14 @@ def fetch_group_members(
     if save_path:
         _save_members(members, save_path)
 
+    if generate_html:
+        html_out = render_org_tree_html(
+            members=members,
+            output_path=_resolve_html_path(save_path),
+            fetched_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        )
+        print(f"组织架构树 HTML 已保存: {html_out}")
+
     return members
 
 
@@ -271,7 +300,8 @@ def fetch_group_members_union(
     group_codes: list[str],
     authorization: Optional[str] = None,
     verbose: bool = True,
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    generate_html: bool = True
 ) -> list[dict]:
     """
     批量抓取多个群组成员，合并并去重后返回
@@ -281,6 +311,7 @@ def fetch_group_members_union(
         authorization: 授权令牌（可选，默认从环境变量读取）
         verbose: 是否打印过程信息
         save_path: 保存路径（可选），传入时保存为 JSON
+        generate_html: 是否在抓取后生成组织树 HTML，默认 True
     """
     authorization = authorization or TEAMS_AUTHORIZATION
     if not authorization:
@@ -302,6 +333,7 @@ def fetch_group_members_union(
             authorization=authorization,
             verbose=False,
             fill_virtual_superiors=False,
+            generate_html=False,
         )
         all_members.extend(group_members)
         if verbose:
@@ -314,6 +346,14 @@ def fetch_group_members_union(
 
     if save_path:
         _save_members(deduped_members, save_path)
+
+    if generate_html:
+        html_out = render_org_tree_html(
+            members=deduped_members,
+            output_path=_resolve_html_path(save_path),
+            fetched_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        )
+        print(f"组织架构树 HTML 已保存: {html_out}")
 
     return deduped_members
 
