@@ -99,71 +99,77 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
   <title>Teams 组织架构树</title>
   <style>
     :root {{
-      --bg: #f3f5f9;
+      --bg: #f5f5f7;
       --surface: #ffffff;
-      --text: #0f172a;
-      --muted: #6b7280;
-      --line: #cbd5e1;
-      --accent: #0c4a6e;
-      --highlight: #fef08a;
+      --surface-soft: #fafafc;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --accent: #0071e3;
+      --highlight: #d8ecff;
+      --shadow: rgba(17, 17, 17, 0.08);
     }}
     body {{
       margin: 0;
-      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: radial-gradient(circle at 10% 0%, #e0f2fe 0%, var(--bg) 48%);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+      background: linear-gradient(180deg, #fbfbfd 0%, var(--bg) 100%);
       color: var(--text);
     }}
     .container {{
-      max-width: 1360px;
-      margin: 20px auto;
-      padding: 0 16px 24px;
+      max-width: 1240px;
+      margin: 16px auto;
+      padding: 0 14px 20px;
     }}
     .panel {{
       background: var(--surface);
-      border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      padding: 16px;
-      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      border: 1px solid #ececf0;
+      border-radius: 20px;
+      padding: 14px;
+      box-shadow: 0 10px 26px var(--shadow);
     }}
     h1 {{
-      margin: 0 0 12px;
-      font-size: 24px;
+      margin: 0 0 10px;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
     }}
     .meta-row {{
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 14px;
       color: var(--muted);
-      margin-bottom: 12px;
-      font-size: 14px;
+      margin-bottom: 10px;
+      font-size: 13px;
     }}
     .toolbar {{
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       flex-wrap: wrap;
     }}
     .search-box {{
       width: 100%;
-      max-width: 380px;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 14px;
+      max-width: 340px;
+      border: 1px solid #dcdce2;
+      border-radius: 12px;
+      padding: 9px 11px;
+      font-size: 13px;
+      background: var(--surface-soft);
       outline: none;
     }}
     .search-box:focus {{
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.16);
+      background: var(--surface);
     }}
     .canvas-wrap {{
-      margin-top: 10px;
-      border: 1px solid #dbeafe;
-      border-radius: 12px;
-      background: linear-gradient(180deg, #f8fbff 0%, #f5f7fb 100%);
+      margin-top: 8px;
+      border: 1px solid #e4e4ea;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fbfbfd 0%, #f3f4f7 100%);
       height: 72vh;
-      min-height: 580px;
+      min-height: 540px;
       overflow: hidden;
       position: relative;
       cursor: grab;
@@ -181,54 +187,97 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
       color: var(--muted);
     }}
     .btn {{
-      border: 1px solid #bfdbfe;
-      background: #eff6ff;
-      color: #1e3a8a;
-      border-radius: 8px;
+      border: 1px solid #dcdce2;
+      background: var(--surface-soft);
+      color: #1d1d1f;
+      border-radius: 10px;
       font-size: 12px;
       padding: 6px 10px;
       cursor: pointer;
     }}
+    .btn:hover {{
+      background: #f0f0f4;
+    }}
+    .btn:disabled {{
+      opacity: 0.45;
+      cursor: not-allowed;
+    }}
     .link {{
-      stroke: #94a3b8;
-      stroke-width: 1.3;
+      stroke: #b4b4bd;
+      stroke-width: 1.15;
       fill: none;
     }}
     .node rect {{
       fill: #ffffff;
-      stroke: #cbd5e1;
-      stroke-width: 1.2;
-      border-radius: 10px;
-      rx: 10;
-      ry: 10;
+      stroke: #d7d7df;
+      stroke-width: 1.05;
+      rx: 12;
+      ry: 12;
     }}
     .node .name {{
-      font-size: 13px;
-      font-weight: 700;
-      fill: #0f172a;
+      font-size: 12.5px;
+      font-weight: 600;
+      fill: #1d1d1f;
     }}
     .node .meta {{
-      font-size: 11px;
-      fill: #475569;
+      font-size: 10.5px;
+      fill: #5e5e66;
+    }}
+    .node text {{
+      user-select: text;
+      -webkit-user-select: text;
+      cursor: text;
     }}
     .node.highlight rect {{
-      background: var(--highlight);
-      fill: #fef9c3;
-      stroke: #f59e0b;
-      stroke-width: 1.6;
+      fill: var(--highlight);
+      stroke: #3395ff;
+      stroke-width: 1.25;
     }}
     .node.virtual rect {{
-      fill: #fff7ed;
-      stroke: #f59e0b;
+      fill: #fff6ed;
+      stroke: #e89b46;
       stroke-dasharray: 4 3;
     }}
     .node.virtual .name {{
-      fill: #9a3412;
+      fill: #8b4a18;
     }}
     .node.expandable .toggle {{
-      fill: #0c4a6e;
+      fill: #0a67c8;
+      font-size: 11px;
+      font-weight: 600;
+    }}
+    .hover-trail {{
+      position: absolute;
+      display: none;
+      max-width: 300px;
+      min-width: 190px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #dcdce3;
+      border-radius: 12px;
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+      padding: 10px 11px;
       font-size: 12px;
-      font-weight: 700;
+      color: #2b2b2f;
+      line-height: 1.45;
+      pointer-events: none;
+      z-index: 5;
+      backdrop-filter: blur(8px);
+    }}
+    .hover-trail.show {{
+      display: block;
+    }}
+    .trail-title {{
+      font-size: 11px;
+      color: #73737b;
+      margin-bottom: 6px;
+    }}
+    .trail-item {{
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }}
+    .trail-empty {{
+      color: #8b8b92;
     }}
   </style>
 </head>
@@ -242,13 +291,16 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
       </div>
       <div class="toolbar">
         <input id="searchInput" class="search-box" placeholder="搜索姓名 / 工号 / 部门" />
+        <button id="prevMatchBtn" class="btn" type="button">pre</button>
+        <button id="nextMatchBtn" class="btn" type="button">next</button>
         <button id="resetViewBtn" class="btn" type="button">重置视图</button>
       </div>
-      <div class="tip">说明：树自左向右展开；首屏只显示根节点；点击节点展开直属下级；支持滚轮缩放和拖动画布。</div>
+      <div class="tip">说明：树自左向右展开；首屏只显示根节点；按姓名搜索将自动居中命中节点；可用 pre/next 切换同名结果；节点文本支持框选；空白处支持拖动画布。</div>
       <div id="canvasWrap" class="canvas-wrap">
         <svg id="treeSvg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet">
           <g id="viewport"></g>
         </svg>
+        <div id="hoverTrail" class="hover-trail" aria-hidden="true"></div>
       </div>
     </div>
   </div>
@@ -256,12 +308,13 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
   <script>
     const NODES = {nodes_json};
     const ROOT_IDS = {roots_json};
-    const NODE_W = 166;
-    const NODE_H = 62;
-    const H_STEP = 210;
-    const V_STEP = 94;
-    const ROOT_GAP_UNITS = 0.28;
-    const SUBTREE_GAP_UNITS = 0.18;
+    const NODE_W = 146;
+    const NODE_H = 56;
+    const H_STEP = 176;
+    const V_STEP = 78;
+    const ROOT_GAP_UNITS = 0.18;
+    const SUBTREE_GAP_UNITS = 0.12;
+    const HOVER_DELAY_MS = 1000;
 
     const byId = new Map(NODES.map((n) => [n.node_id, n]));
     const expanded = new Set();
@@ -273,16 +326,170 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
+    let hoverTimer = null;
+    let hoverNodeId = "";
+    let hoverPoint = {{ x: 0, y: 0 }};
+    let latestPositions = new Map();
+    let nameMatches = [];
+    let activeMatchIndex = -1;
 
     const svg = document.getElementById("treeSvg");
     const viewport = document.getElementById("viewport");
     const canvasWrap = document.getElementById("canvasWrap");
     const searchInput = document.getElementById("searchInput");
+    const prevMatchBtn = document.getElementById("prevMatchBtn");
+    const nextMatchBtn = document.getElementById("nextMatchBtn");
     const resetViewBtn = document.getElementById("resetViewBtn");
+    const hoverTrail = document.getElementById("hoverTrail");
 
     function truncate(text, maxLen = 16) {{
       if (!text) return "-";
       return text.length > maxLen ? `${{text.slice(0, maxLen)}}...` : text;
+    }}
+
+    function escapeHtml(text) {{
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }}
+
+    function clearHoverTrailTimer() {{
+      if (!hoverTimer) return;
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }}
+
+    function hideHoverTrail() {{
+      clearHoverTrailTimer();
+      hoverTrail.classList.remove("show");
+      hoverTrail.setAttribute("aria-hidden", "true");
+      hoverTrail.innerHTML = "";
+    }}
+
+    function listAncestorTrail(nodeId) {{
+      const trail = [];
+      let current = byId.get(nodeId);
+      while (current && current.parent_id) {{
+        const parent = byId.get(current.parent_id);
+        if (!parent) break;
+        trail.push(parent);
+        current = parent;
+      }}
+      return trail.reverse();
+    }}
+
+    function renderTrailHtml(nodeId) {{
+      const trail = listAncestorTrail(nodeId);
+      if (!trail.length) {{
+        return '<div class="trail-empty">无上游祖先节点</div>';
+      }}
+
+      return trail
+        .map((node) => `<div class="trail-item">${{escapeHtml(node.name || "-")}}-${{escapeHtml(node.dept_name || "-")}}</div>`)
+        .join("");
+    }}
+
+    function placeHoverTrail(clientX, clientY) {{
+      const wrapRect = canvasWrap.getBoundingClientRect();
+      let left = clientX - wrapRect.left + 12;
+      let top = clientY - wrapRect.top + 14;
+
+      const maxLeft = canvasWrap.clientWidth - hoverTrail.offsetWidth - 10;
+      const maxTop = canvasWrap.clientHeight - hoverTrail.offsetHeight - 10;
+      left = Math.max(10, Math.min(left, maxLeft));
+      top = Math.max(10, Math.min(top, maxTop));
+
+      hoverTrail.style.left = `${{left}}px`;
+      hoverTrail.style.top = `${{top}}px`;
+    }}
+
+    function showHoverTrail(nodeId, clientX, clientY) {{
+      hoverTrail.innerHTML = `<div class="trail-title">上游祖先链（根 -> 父级）</div>${{renderTrailHtml(nodeId)}}`;
+      hoverTrail.classList.add("show");
+      hoverTrail.setAttribute("aria-hidden", "false");
+      placeHoverTrail(clientX, clientY);
+    }}
+
+    function scheduleHoverTrail(nodeId, clientX, clientY) {{
+      clearHoverTrailTimer();
+      hoverNodeId = nodeId;
+      hoverPoint = {{ x: clientX, y: clientY }};
+      hoverTimer = setTimeout(() => {{
+        if (hoverNodeId !== nodeId) return;
+        showHoverTrail(nodeId, hoverPoint.x, hoverPoint.y);
+      }}, HOVER_DELAY_MS);
+    }}
+
+    function isInsideNode(target) {{
+      let current = target;
+      while (current && current !== svg) {{
+        if (current.classList && current.classList.contains("node")) return true;
+        current = current.parentNode;
+      }}
+      return false;
+    }}
+
+    function hasTextSelection() {{
+      const selection = window.getSelection();
+      return !!selection && String(selection).length > 0;
+    }}
+
+    function updateMatchButtons() {{
+      const usable = nameMatches.length > 1;
+      prevMatchBtn.disabled = !usable;
+      nextMatchBtn.disabled = !usable;
+    }}
+
+    function findNameMatches(keyword) {{
+      const exact = [];
+      const includes = [];
+
+      NODES.forEach((node) => {{
+        const name = (node.name || "").trim().toLowerCase();
+        if (!name) return;
+        if (name === keyword) {{
+          exact.push(node.node_id);
+          return;
+        }}
+        if (name.includes(keyword)) {{
+          includes.push(node.node_id);
+        }}
+      }});
+
+      return exact.length ? exact : includes;
+    }}
+
+    function centerNode(nodeId) {{
+      const pos = latestPositions.get(nodeId);
+      if (!pos) return;
+
+      const targetX = (pos.x + NODE_W / 2) * scale;
+      const targetY = pos.y * scale;
+      tx = canvasWrap.clientWidth / 2 - targetX;
+      ty = canvasWrap.clientHeight / 2 - targetY;
+      applyTransform();
+    }}
+
+    function focusActiveMatch() {{
+      updateMatchButtons();
+      if (!nameMatches.length || activeMatchIndex < 0) return;
+      const nodeId = nameMatches[activeMatchIndex];
+      if (!nodeId) return;
+
+      expandAncestors(nodeId);
+      highlights.add(nodeId);
+      render();
+      centerNode(nodeId);
+    }}
+
+    function switchMatch(step) {{
+      if (!nameMatches.length) return;
+      const total = nameMatches.length;
+      activeMatchIndex = (activeMatchIndex + step + total) % total;
+      focusActiveMatch();
     }}
 
     function getVisibleChildren(nodeId) {{
@@ -362,23 +569,23 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
 
       const name = document.createElementNS("http://www.w3.org/2000/svg", "text");
       name.setAttribute("x", 8);
-      name.setAttribute("y", 18);
+      name.setAttribute("y", 17);
       name.setAttribute("class", "name");
-      name.textContent = truncate(node.name || "-", 12);
+      name.textContent = truncate(node.name || "-", 10);
       g.appendChild(name);
 
       const idText = document.createElementNS("http://www.w3.org/2000/svg", "text");
       idText.setAttribute("x", 8);
-      idText.setAttribute("y", 34);
+      idText.setAttribute("y", 31);
       idText.setAttribute("class", "meta");
-      idText.textContent = `工号: ${{truncate(node.id || "-", 18)}}`;
+      idText.textContent = `工号: ${{truncate(node.id || "-", 14)}}`;
       g.appendChild(idText);
 
       const deptText = document.createElementNS("http://www.w3.org/2000/svg", "text");
       deptText.setAttribute("x", 8);
-      deptText.setAttribute("y", 50);
+      deptText.setAttribute("y", 45);
       deptText.setAttribute("class", "meta");
-      deptText.textContent = `部门: ${{truncate(node.dept_name || "-", 12)}}`;
+      deptText.textContent = `部门: ${{truncate(node.dept_name || "-", 10)}}`;
       g.appendChild(deptText);
 
       if (hasChildren) {{
@@ -394,17 +601,40 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
       if (hasChildren) {{
         g.addEventListener("click", (e) => {{
           e.stopPropagation();
+          if (hasTextSelection()) return;
+          hideHoverTrail();
           if (expanded.has(node.node_id)) expanded.delete(node.node_id);
           else expanded.add(node.node_id);
           render();
         }});
       }}
 
+      g.addEventListener("mouseenter", (e) => {{
+        scheduleHoverTrail(node.node_id, e.clientX, e.clientY);
+      }});
+
+      g.addEventListener("mousemove", (e) => {{
+        hoverPoint = {{ x: e.clientX, y: e.clientY }};
+        if (hoverNodeId === node.node_id && hoverTrail.classList.contains("show")) {{
+          placeHoverTrail(e.clientX, e.clientY);
+        }}
+      }});
+
+      g.addEventListener("mouseleave", () => {{
+        if (hoverNodeId === node.node_id) {{
+          hoverNodeId = "";
+        }}
+        hideHoverTrail();
+      }});
+
       return g;
     }}
 
     function render() {{
+      hoverNodeId = "";
+      hideHoverTrail();
       const {{ positions, edges }} = layoutTree();
+      latestPositions = positions;
       while (viewport.firstChild) viewport.removeChild(viewport.firstChild);
 
       edges.forEach(([fromId, toId]) => {{
@@ -442,7 +672,10 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
     function handleSearch(keyword) {{
       const kw = (keyword || "").trim().toLowerCase();
       highlights.clear();
+      nameMatches = [];
+      activeMatchIndex = -1;
       if (!kw) {{
+        updateMatchButtons();
         render();
         return;
       }}
@@ -454,7 +687,15 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
         }}
       }});
 
-      render();
+      nameMatches = findNameMatches(kw);
+      updateMatchButtons();
+      if (!nameMatches.length) {{
+        render();
+        return;
+      }}
+
+      activeMatchIndex = 0;
+      focusActiveMatch();
     }}
 
     function resetView() {{
@@ -465,6 +706,8 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
     }}
 
     searchInput.addEventListener("input", (e) => handleSearch(e.target.value));
+    prevMatchBtn.addEventListener("click", () => switchMatch(-1));
+    nextMatchBtn.addEventListener("click", () => switchMatch(1));
     resetViewBtn.addEventListener("click", () => resetView());
 
     svg.addEventListener("wheel", (e) => {{
@@ -476,6 +719,9 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
     }}, {{ passive: false }});
 
     svg.addEventListener("mousedown", (e) => {{
+      if (e.button !== 0) return;
+      if (isInsideNode(e.target)) return;
+      if (hasTextSelection()) return;
       dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -496,6 +742,7 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
       canvasWrap.classList.remove("dragging");
     }});
 
+    updateMatchButtons();
     render();
   </script>
 </body>
