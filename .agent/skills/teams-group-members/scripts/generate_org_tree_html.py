@@ -1,23 +1,10 @@
 """
-根据成员 JSON 生成组织架构树 HTML（离线单文件）
+根据成员列表生成组织架构树 HTML（离线单文件，供抓取流程内部调用）
 """
-import argparse
 import json
 from datetime import datetime
 from html import escape
 from pathlib import Path
-
-
-def _load_members(input_path: Path) -> list[dict]:
-    """读取成员 JSON 列表"""
-    with input_path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if not isinstance(data, list):
-        raise ValueError("输入 JSON 必须是 list[dict] 结构")
-
-    members = [item for item in data if isinstance(item, dict)]
-    return members
 
 
 def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
@@ -516,55 +503,29 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int,
 """
 
 
-def generate_org_tree_html(input_path: str, output_path: str, fetched_date: str = "") -> str:
+def render_org_tree_html(members: list[dict], output_path: str, fetched_date: str = "") -> str:
     """
-    从成员 JSON 生成组织架构树 HTML
+    根据成员列表生成组织架构树 HTML（内部调用）
     """
-    input_file = Path(input_path)
-    output_file = Path(output_path)
+    if not isinstance(members, list):
+        raise ValueError("members 必须是 list[dict] 结构")
 
-    if not input_file.exists():
-        raise FileNotFoundError(f"输入文件不存在: {input_file.as_posix()}")
+    normalized_members = [item for item in members if isinstance(item, dict)]
+    roots, node_map = _build_tree(normalized_members)
 
-    members = _load_members(input_file)
-    roots, node_map = _build_tree(members)
-
-    if fetched_date:
-        used_date = fetched_date
-    else:
-        mtime = datetime.fromtimestamp(input_file.stat().st_mtime)
-        used_date = mtime.strftime("%Y-%m-%d %H:%M:%S")
-
+    used_date = fetched_date or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     html_content = _render_html(
         roots=roots,
         node_map=node_map,
-        total_count=len(members),
+        total_count=len(normalized_members),
         fetched_date=used_date,
     )
 
+    output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text(html_content, encoding="utf-8")
     return output_file.as_posix()
 
 
-def main():
-    parser = argparse.ArgumentParser(description="根据成员JSON生成组织架构树HTML")
-    parser.add_argument("--input", "-i", required=True, help="输入成员 JSON 文件路径")
-    parser.add_argument("--output", "-o", required=True, help="输出 HTML 文件路径")
-    parser.add_argument(
-        "--fetched-date",
-        default="",
-        help="数据抓取日期（可选，如 2026-02-10 18:30:00）",
-    )
-    args = parser.parse_args()
-
-    out = generate_org_tree_html(
-        input_path=args.input,
-        output_path=args.output,
-        fetched_date=args.fetched_date,
-    )
-    print(f"组织架构树 HTML 已生成: {out}")
-
-
 if __name__ == "__main__":
-    main()
+    raise SystemExit("该脚本仅供内部调用，请使用 fetch_group_members.py 进行抓取并自动生成HTML。")
