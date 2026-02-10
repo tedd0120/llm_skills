@@ -1,7 +1,8 @@
 # group-members-skill 规范
 
 ## 目的
-待定 - 由归档变更 update-group-members-batch-sync 创建。归档后请更新目的。
+定义 360Teams 群组成员抓取、批量并集去重与结果落盘的行为规范。
+该能力由归档变更 `update-group-members-batch-sync` 等持续演进，并于 2026-02-10 与组织树 HTML 生成能力在 `.agent/skills/teams-group-members` 中统一维护。
 ## 需求
 ### 需求：支持通过入参指定成员数据保存路径
 
@@ -92,4 +93,3 @@
 #### 场景：命令行调用
 - 运行 `python fetch_group_members.py --group FhSnheH3T_grT5yzxqVS5o`
 - **必须**输出格式化的成员列表到控制台
-

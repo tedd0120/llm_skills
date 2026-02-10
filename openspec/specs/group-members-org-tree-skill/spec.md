@@ -1,7 +1,8 @@
 # group-members-org-tree-skill 规范
 
 ## 目的
-待定 - 由归档变更 add-teams-org-tree-html-skill 创建。归档后请更新目的。
+定义“成员 JSON -> 组织架构树 HTML”能力的行为规范。
+该能力最初由归档变更 `add-teams-org-tree-html-skill` 引入，并于 2026-02-10 合并到 `.agent/skills/teams-group-members` 统一维护。
 ## 需求
 ### 需求：从成员 JSON 生成组织架构树 HTML
 
@@ -96,4 +97,3 @@ HTML 页面**必须**以画布式决策树展示组织结构，并支持节点�
 
 - 当页面渲染完成
 - 系统**必须**展示数据抓取日期与总人数
-
