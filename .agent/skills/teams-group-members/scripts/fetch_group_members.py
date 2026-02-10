@@ -121,6 +121,57 @@ def _dedupe_members(members: list[dict]) -> list[dict]:
     return deduped
 
 
+def _append_virtual_superiors(members: list[dict]) -> list[dict]:
+    """
+    若成员 superior 不在当前成员 name 中，则创建同名虚拟上级节点（同名合并）
+    """
+    existing_names = {str(m.get('name', '')).strip() for m in members if str(m.get('name', '')).strip()}
+    virtual_names = {
+        str(m.get('name', '')).strip()
+        for m in members
+        if m.get('is_virtual') and str(m.get('name', '')).strip()
+    }
+
+    missing_superiors = []
+    for m in members:
+        superior = str(m.get('superior', '')).strip()
+        if not superior:
+            continue
+        if superior in existing_names or superior in virtual_names:
+            continue
+        missing_superiors.append(superior)
+
+    unique_missing = sorted(set(missing_superiors))
+    if not unique_missing:
+        return members
+
+    virtual_members = []
+    for idx, superior_name in enumerate(unique_missing, 1):
+        virtual_members.append(
+            {
+                'name': superior_name,
+                'id': f'VIRTUAL_SUPERIOR_{idx}',
+                'userName': '',
+                'role': 0,
+                'role_desc': '虚拟上级',
+                'deptName': '虚拟上级',
+                'deptCode': '',
+                'superior': '',
+                'bpName': '',
+                'workPlaceName': '',
+                'workPlaceCode': '',
+                'sex': 0,
+                'sex_desc': '未知',
+                'portrait_url': '',
+                'create_dt': 0,
+                'gorder': 0,
+                'is_virtual': True,
+            }
+        )
+
+    return members + virtual_members
+
+
 def _save_members(members: list[dict], save_path: str):
     """
     保存成员列表到 JSON 文件
@@ -136,7 +187,8 @@ def fetch_group_members(
     group_code: str,
     authorization: Optional[str] = None,
     verbose: bool = True,
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    fill_virtual_superiors: bool = True
 ) -> list[dict]:
     """
     获取指定群组的成员列表并解析详细信息
@@ -146,6 +198,7 @@ def fetch_group_members(
         authorization: 授权令牌（可选，默认从环境变量读取）
         verbose: 是否打印结果信息
         save_path: 保存路径（可选），传入时保存为 JSON
+        fill_virtual_superiors: 是否补齐虚拟上级节点，默认 True
 
     Returns:
         解析后的成员信息字典列表，每个字典包含：
@@ -197,8 +250,11 @@ def fetch_group_members(
 
     members = [_parse_member(m) for m in raw_members]
 
+    if fill_virtual_superiors:
+        members = _append_virtual_superiors(members)
+
     if verbose:
-        total = data.get('total', len(members))
+        total = len(members)
         print(f"群组 {group_code} 共 {total} 名成员：")
         print(f"{'序号':<4} {'姓名':<8} {'工号':<14} {'部门':<16} {'上级':<8} {'工位':<20}")
         print("-" * 70)
@@ -245,12 +301,14 @@ def fetch_group_members_union(
             group_code=group_code,
             authorization=authorization,
             verbose=False,
+            fill_virtual_superiors=False,
         )
         all_members.extend(group_members)
         if verbose:
             print(f"群组 {group_code} 获取 {len(group_members)} 名成员")
 
     deduped_members = _dedupe_members(all_members)
+    deduped_members = _append_virtual_superiors(deduped_members)
     if verbose:
         print(f"批量抓取完成，原始记录 {len(all_members)} 条，去重后 {len(deduped_members)} 条")
 
