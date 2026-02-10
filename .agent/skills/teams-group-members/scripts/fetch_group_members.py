@@ -4,6 +4,7 @@ Teams群组成员查询脚本
 
 敏感配置通过 .env 文件加载：
 - TEAMS_AUTHORIZATION: 授权令牌
+- TEAMS_GROUP_CODES: 固定群组列表（逗号分隔）
 """
 import os
 import json
@@ -17,11 +18,12 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent.parent.parent / '.env')
 
 TEAMS_AUTHORIZATION = os.getenv('TEAMS_AUTHORIZATION')
+TEAMS_GROUP_CODES = os.getenv('TEAMS_GROUP_CODES', '')
 
 
-def _check_env():
+def _check_env(authorization: Optional[str] = None):
     """检查必需的环境变量是否已配置"""
-    if not TEAMS_AUTHORIZATION:
+    if not (authorization or TEAMS_AUTHORIZATION):
         raise EnvironmentError("缺少必需的环境变量: TEAMS_AUTHORIZATION，请在 .env 文件中配置")
 
 
@@ -74,10 +76,67 @@ def _parse_member(member: dict) -> dict:
     }
 
 
+def _parse_group_codes(group_codes_str: Optional[str] = None) -> list[str]:
+    """
+    解析群组代码列表字符串
+
+    Args:
+        group_codes_str: 逗号分隔的群组代码字符串，未传时默认读取环境变量
+
+    Returns:
+        清洗后的群组代码列表
+    """
+    raw = TEAMS_GROUP_CODES if group_codes_str is None else group_codes_str
+    return [code.strip() for code in raw.split(',') if code and code.strip()]
+
+
+def _member_unique_key(member: dict) -> Optional[str]:
+    """
+    构造成员去重键，优先 id，回退 userName
+    """
+    member_id = str(member.get('id', '')).strip()
+    if member_id:
+        return f"id:{member_id}"
+
+    user_name = str(member.get('userName', '')).strip()
+    if user_name:
+        return f"userName:{user_name}"
+
+    return None
+
+
+def _dedupe_members(members: list[dict]) -> list[dict]:
+    """
+    对成员列表去重：优先按 id，id 为空时按 userName
+    """
+    seen = set()
+    deduped = []
+    for member in members:
+        key = _member_unique_key(member)
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        deduped.append(member)
+    return deduped
+
+
+def _save_members(members: list[dict], save_path: str):
+    """
+    保存成员列表到 JSON 文件
+    """
+    path = Path(save_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('w', encoding='utf-8') as f:
+        json.dump(members, f, ensure_ascii=False, indent=2)
+    print(f"成员数据已保存: {path.as_posix()}")
+
+
 def fetch_group_members(
     group_code: str,
     authorization: Optional[str] = None,
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> list[dict]:
     """
     获取指定群组的成员列表并解析详细信息
@@ -86,6 +145,7 @@ def fetch_group_members(
         group_code: 群组代码，如 'FhSnheH3T_grT5yzxqVS5o'
         authorization: 授权令牌（可选，默认从环境变量读取）
         verbose: 是否打印结果信息
+        save_path: 保存路径（可选），传入时保存为 JSON
 
     Returns:
         解析后的成员信息字典列表，每个字典包含：
@@ -109,7 +169,7 @@ def fetch_group_members(
     authorization = authorization or TEAMS_AUTHORIZATION
 
     if not authorization:
-        _check_env()
+        _check_env(authorization)
 
     url = f"https://im.360teams.com/api/qfin-api/rce-app/app/groups/members/{group_code}"
     headers = {
@@ -145,7 +205,59 @@ def fetch_group_members(
         for i, m in enumerate(members, 1):
             print(f"{i:<4} {m['name']:<8} {m['id']:<14} {m['deptName']:<16} {m['superior']:<8} {m['workPlaceName']:<20}")
 
+    if save_path:
+        _save_members(members, save_path)
+
     return members
+
+
+def fetch_group_members_union(
+    group_codes: list[str],
+    authorization: Optional[str] = None,
+    verbose: bool = True,
+    save_path: Optional[str] = None
+) -> list[dict]:
+    """
+    批量抓取多个群组成员，合并并去重后返回
+
+    Args:
+        group_codes: 群组代码列表
+        authorization: 授权令牌（可选，默认从环境变量读取）
+        verbose: 是否打印过程信息
+        save_path: 保存路径（可选），传入时保存为 JSON
+    """
+    authorization = authorization or TEAMS_AUTHORIZATION
+    if not authorization:
+        _check_env(authorization)
+
+    clean_group_codes = [code.strip() for code in group_codes if code and code.strip()]
+    if not clean_group_codes:
+        raise ValueError("群组列表为空，请检查 TEAMS_GROUP_CODES 或传入参数")
+
+    if verbose:
+        print(f"开始批量抓取，共 {len(clean_group_codes)} 个群组")
+
+    all_members = []
+    for idx, group_code in enumerate(clean_group_codes, 1):
+        if verbose:
+            print(f"[{idx}/{len(clean_group_codes)}] 抓取群组: {group_code}")
+        group_members = fetch_group_members(
+            group_code=group_code,
+            authorization=authorization,
+            verbose=False,
+        )
+        all_members.extend(group_members)
+        if verbose:
+            print(f"群组 {group_code} 获取 {len(group_members)} 名成员")
+
+    deduped_members = _dedupe_members(all_members)
+    if verbose:
+        print(f"批量抓取完成，原始记录 {len(all_members)} 条，去重后 {len(deduped_members)} 条")
+
+    if save_path:
+        _save_members(deduped_members, save_path)
+
+    return deduped_members
 
 
 def main():
@@ -153,11 +265,23 @@ def main():
     _check_env()
 
     parser = argparse.ArgumentParser(description='获取360Teams群组成员信息')
-    parser.add_argument('--group', '-g', type=str, required=True,
-                        help='群组代码，如 FhSnheH3T_grT5yzxqVS5o')
+    parser.add_argument('--group', '-g', type=str,
+                        help='单个群组代码，如 FhSnheH3T_grT5yzxqVS5o')
+    parser.add_argument('--output', '-o', type=str,
+                        help='输出文件路径（JSON），如 data/members.json')
     args = parser.parse_args()
 
-    fetch_group_members(args.group)
+    if args.group:
+        fetch_group_members(args.group, save_path=args.output)
+        return
+
+    group_codes = _parse_group_codes()
+    if not group_codes:
+        raise EnvironmentError(
+            "未指定 --group 且缺少 TEAMS_GROUP_CODES，请在 .env 配置逗号分隔群组列表"
+        )
+
+    fetch_group_members_union(group_codes, save_path=args.output)
 
 
 if __name__ == '__main__':
