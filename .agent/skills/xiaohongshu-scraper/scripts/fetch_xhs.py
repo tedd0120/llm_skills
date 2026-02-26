@@ -132,10 +132,14 @@ class XHSScraper:
             self._sleep(1, 2)
 
         try:
-            qr = page.locator(S.QR_CODE_IMAGE)
-            qr.wait_for(state="visible", timeout=15000)
+            # 等待二维码图片出现，确保整个登录框也已经渲染
+            page.wait_for_selector(S.QR_CODE_IMAGE, state="visible", timeout=15000)
+            self._sleep(1, 2)  # 给一点时间让 CSS 淡入/滑入动画完成
+            
+            # 截取整个登录面板而非仅仅二维码图片，增加容错率，避免截出半张图
+            modal = page.locator(S.LOGIN_MODAL)
             qr_path = os.path.abspath("xhs_qr_login.png")
-            qr.screenshot(path=qr_path)
+            modal.screenshot(path=qr_path)
             print(f"[!] 请扫码: {qr_path}")
 
             # 等待登录完成（登录框消失）
@@ -147,8 +151,11 @@ class XHSScraper:
             if os.path.exists(qr_path):
                 os.remove(qr_path)
             self._sleep(2, 3)
-        except PwTimeout:
-            print("[✗] 扫码超时，退出。")
+        except PwTimeout as e:
+            print(f"[✗] 扫码超时，退出。详情: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"[✗] 扫码过程中发生异常: {e}")
             sys.exit(1)
 
     # ------------------------------------------------------------------
