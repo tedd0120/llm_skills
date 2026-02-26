@@ -22,6 +22,10 @@
 *   **Teams 考勤 (Teams Attendance)** [`teams-attendance`]: 自动化处理 Teams 考勤与工时统计生成。
 *   **Teams 群组成员 (Teams Group Members)** [`teams-group-members`]: 获取 360Teams 群组成员并生成可离线打开的组织架构树 HTML，支持多群并集去重与结果落盘。
 
+### 🔍 社交媒体 (Social Media)
+
+*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 通过 Playwright 自动化浏览器抓取小红书帖子正文与评论区内容。支持 QR 码扫码登录、Cookie 持久化、多关键词搜索与去重、反风控策略。Agent 层自动生成衍生搜索词并对原始内容进行 AI 总结，按帖子输出独立 Markdown 文件。跨平台支持 Windows (msedge) 和 Linux (Xvfb 虚拟显示器)。
+
 ## 🚀 使用指南
 
 每个技能文件夹下均包含独立的 `SKILL.md` 文件，详细说明了该技能的：
@@ -38,7 +42,8 @@
 .agent/skills/
 ├── finance-data-*/         # 金融相关技能集
 ├── teams-attendance/       # 考勤自动化技能
-└── teams-group-members/    # 群组成员与组织树技能
+├── teams-group-members/    # 群组成员与组织树技能
+└── xiaohongshu-scraper/    # 小红书内容抓取与AI总结技能
 data/                       # 本地数据存储目录（已添加至 .gitignore）
 openspec/                   # 开放规范文档
 ```
