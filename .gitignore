@@ -41,3 +41,6 @@ Thumbs.db
 
 # Data
 data/
+
+# Xiaohongshu auth state
+xhs_auth.json
