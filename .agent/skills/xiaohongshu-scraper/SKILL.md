@@ -54,11 +54,11 @@ python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "搜索
 代理脚本采用命令行调用。你可以通过写入临时文件或直接捕获 stdout 获得 JSON 输出。
 
 ```bash
-# 基础搜索 (默认上限 10 篇结果)
+# 基础搜索 (默认上限 20 篇结果)
 python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "2026年春季穿搭"
 
-# 多词联合搜索并指定输出文件, 指定上限 5 篇
-python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "春装搭配,早春outfit" --max-posts 5 --output "data/tmp_xhs_raw.json"
+# 多词联合搜索并指定输出文件, 指定上限 50 篇（硬上限 100）
+python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "春装搭配,早春outfit" --max-posts 50 --output "data/tmp_xhs_raw.json"
 
 # 强制开启无头模式 (通常在 Linux 环境下或不需要看到浏览器弹窗时)
 python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "咖啡拉花教程" --headless

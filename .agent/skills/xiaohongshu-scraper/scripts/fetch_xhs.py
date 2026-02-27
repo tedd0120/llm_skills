@@ -33,7 +33,7 @@ class XHSScraper:
             else:
                 self.headless = False
 
-        self.max_posts = min(max_posts, 20)  # 硬上限 20
+        self.max_posts = min(max_posts, 100)  # 硬上限 100
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
             '.agent/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
@@ -81,16 +81,21 @@ class XHSScraper:
             # 1) 登录
             self._ensure_login(page, ctx)
 
-            # 2) 搜索 + 抓取
+            # 2) 搜索 + 抓取（均分 + 回收策略）
             all_posts = []
             seen = set()
-            for kw in keywords:
-                if len(all_posts) >= self.max_posts:
+            remaining_total = self.max_posts
+            for idx, kw in enumerate(keywords):
+                if remaining_total <= 0:
                     break
-                remain = self.max_posts - len(all_posts)
-                print(f"\n[*] 搜索关键词: {kw}  (剩余额度 {remain})")
-                posts = self._search_keyword(page, kw, remain, seen)
+                remaining_kws = len(keywords) - idx
+                quota = remaining_total // remaining_kws  # 均分
+                if remaining_total % remaining_kws != 0:
+                    quota += 1  # 余数给当前关键词多 1 篇
+                print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})")
+                posts = self._search_keyword(page, kw, quota, seen)
                 all_posts.extend(posts)
+                remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
 
             # 3) 输出
             out = json.dumps(all_posts, ensure_ascii=False, indent=2)
@@ -176,19 +181,34 @@ class XHSScraper:
 
         self._sleep(2, 4)
 
-        # 收集帖子链接（使用带 xsec_token 的 /search_result/ 链接）
-        link_els = page.locator(S.POST_LINK).all()
+        # 收集帖子链接 — 滚动加载瀑布流以获取更多结果
         hrefs = []
-        for el in link_els:
-            href = el.get_attribute("href")
-            if not href:
-                continue
-            full = ("https://www.xiaohongshu.com" + href) if href.startswith("/") else href
-            # 去重 key = note id
-            note_id = href.split("/")[-1].split("?")[0]
-            if note_id not in seen:
-                seen.add(note_id)
-                hrefs.append(full)
+        max_scroll_rounds = 10  # 最多滚动 10 轮，防止无限循环
+        prev_count = 0
+        for scroll_round in range(max_scroll_rounds):
+            link_els = page.locator(S.POST_LINK).all()
+            for el in link_els:
+                href = el.get_attribute("href")
+                if not href:
+                    continue
+                full = ("https://www.xiaohongshu.com" + href) if href.startswith("/") else href
+                note_id = href.split("/")[-1].split("?")[0]
+                if note_id not in seen:
+                    seen.add(note_id)
+                    hrefs.append(full)
+
+            # 已经收集到足够的链接，停止滚动
+            if len(hrefs) >= limit:
+                break
+
+            # 如果这一轮没有新链接出现，说明已到底部
+            if len(hrefs) == prev_count:
+                break
+            prev_count = len(hrefs)
+
+            # 向下滚动触发瀑布流加载
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            self._sleep(2, 4)
 
         print(f"  找到 {len(hrefs)} 篇（去重后），抓前 {limit} 篇")
 
@@ -267,8 +287,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--keywords", required=True,
                         help="搜索关键词，多个用逗号分隔")
-    parser.add_argument("--max-posts", type=int, default=10,
-                        help="最多抓取帖子数 (默认 10, 上限 20)")
+    parser.add_argument("--max-posts", type=int, default=20,
+                        help="最多抓取帖子数 (默认 20, 上限 100)")
     parser.add_argument("--output", default="",
                         help="JSON 输出文件路径")
     parser.add_argument("--headless", action="store_true",
