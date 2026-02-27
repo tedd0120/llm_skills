@@ -24,7 +24,7 @@
 
 ### 🔍 社交媒体 (Social Media)
 
-*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 通过 Playwright 自动化浏览器抓取小红书帖子正文与评论区内容。支持 QR 码扫码登录、Cookie 持久化、多关键词搜索与去重、反风控策略。Agent 层自动生成衍生搜索词并对原始内容进行 AI 总结，按帖子输出独立 Markdown 文件。跨平台支持 Windows (msedge) 和 Linux (Xvfb 虚拟显示器)。
+*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 通过 Playwright 自动化浏览器抓取小红书帖子正文与评论区内容。支持 QR 码扫码登录、Cookie 持久化、多关键词搜索与去重、反风控策略。Agent 层自动生成衍生搜索词并对原始内容进行 AI 总结，按帖子输出独立 Markdown 文件。`_index.md` 默认要求输出“深度汇总报告”（含单篇结构化摘要、跨帖共识/分歧、风险与信息缺口），禁止“一句话判语”或纯榜单式收尾。跨平台支持 Windows (msedge) 和 Linux (Xvfb 虚拟显示器)。
 
 ## 🚀 使用指南
 
