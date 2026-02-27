@@ -245,7 +245,6 @@ class XHSScraper:
         comments = self._extract_comments(page)
 
         return {
-            "url":      url,
             "title":    title,
             "content":  content,
             "author":   author,
