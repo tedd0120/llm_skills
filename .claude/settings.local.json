@@ -6,7 +6,16 @@
       "Bash(openspec-cn status:*)",
       "Bash(openspec-cn instructions:*)",
       "Bash(openspec-cn list:*)",
-      "Bash(openspec-cn sync:*)"
+      "Bash(openspec-cn sync:*)",
+      "Bash(ls:*)",
+      "Bash(head:*)",
+      "Bash(python3:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(\"P:/git_repos/llm_skills/openspec/specs/xiaohongshu-scraper/spec.md\":*)",
+      "Bash(\"P:/git_repos/llm_skills/openspec/specs/xhs-output-enforcement/spec.md\":*)",
+      "Bash(\"P:/git_repos/llm_skills/openspec/specs/xiaohongshu-search-clarification/spec.md\":*)",
+      "Bash(cp:*)"
     ]
   }
 }
