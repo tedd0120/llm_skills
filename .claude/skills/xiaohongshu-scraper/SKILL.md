@@ -150,13 +150,13 @@ metadata:
 请确保用户在 `.env` 中添加了此配置，用于保存登录的持久化 state（Cookie 等）：
 
 ```env
-XHS_AUTH_STATE=.agent/skills/xiaohongshu-scraper/scripts/xhs_auth.json
+XHS_AUTH_STATE=.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json
 ```
 
 ### 依赖安装
 
 ```bash
-pip install -r .agent/skills/xiaohongshu-scraper/scripts/requirements.txt
+pip install -r .claude/skills/xiaohongshu-scraper/scripts/requirements.txt
 ```
 
 ### Windows 环境
@@ -183,7 +183,7 @@ Xvfb :99 -screen 0 1920x1080x24 &
 export DISPLAY=:99
 
 # 5. 正常运行脚本 (不加 --headless，将以有头模式在虚拟屏幕中运行)
-python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "搜索词"
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "搜索词"
 ```
 
 > **[参考信息]**：可将 `export DISPLAY=:99` 写入 `.bashrc` 或 `.env` 中持久化。如果使用 systemd 管理 agent 服务，在 service 文件的 `[Service]` 段添加 `Environment=DISPLAY=:99`。
@@ -237,7 +237,7 @@ python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "搜索
 **命令格式：**
 
 ```bash
-python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "关键词1,关键词2,关键词3" --output "data/xiaohongshu/20260303_143000_搜索主旨/raw.json"
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "关键词1,关键词2,关键词3" --output "data/xiaohongshu/20260303_143000_搜索主旨/raw.json"
 ```
 
 **可选参数：**
@@ -252,6 +252,8 @@ python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "关键
 ### 步骤 3：生成增强版汇总报告
 
 读取刚才的 JSON 结果，直接生成完整的 `_index.md` 增强版汇总报告。
+
+**评论数统计**："涉及评论"字段必须计算所有帖子的 `comments_count` 之和。
 
 #### 报告必需板块（8个）
 
@@ -315,11 +317,15 @@ python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "关键
 ## 📄 增强版汇总报告模板
 
 ```markdown
-# 搜索任务: [主旨]
+## 📋 搜索概览
 
-- **执行时间**: [YYYY-MM-DD HH:MM]
-- **使用搜索词**: keyword1, keyword2, keyword3
-- **共抓取帖子**: [N] 篇
+| <b>字段</b>     | <b>值</b>                              |
+|----------------|---------------------------------------|
+| **搜索任务**   | [主旨]                                |
+| **执行时间**   | [YYYY-MM-DD HH:MM]                    |
+| **使用搜索词** | [keyword1, keyword2, keyword3]         |
+| **共抓取帖子** | [N] 篇                                |
+| **涉及评论**   | [M] 条                                |
 
 ---
 
@@ -406,13 +412,13 @@ python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "关键
 
 ```bash
 # 基础搜索 (默认上限 20 篇结果)
-python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "2026年春季穿搭"
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "2026年春季穿搭"
 
 # 多词联合搜索并指定输出文件, 指定上限 50 篇（硬上限 100）
-python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "春装搭配,早春outfit" --max-posts 50 --output "data/tmp_xhs_raw.json"
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "春装搭配,早春outfit" --max-posts 50 --output "data/tmp_xhs_raw.json"
 
 # 强制开启无头模式 (通常在 Linux 环境下或不需要看到浏览器弹窗时)
-python .agent/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "咖啡拉花教程" --headless
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "咖啡拉花教程" --headless
 ```
 
 **首次登录交互：**
