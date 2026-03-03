@@ -15,7 +15,9 @@
       "Bash(\"P:/git_repos/llm_skills/openspec/specs/xiaohongshu-scraper/spec.md\":*)",
       "Bash(\"P:/git_repos/llm_skills/openspec/specs/xhs-output-enforcement/spec.md\":*)",
       "Bash(\"P:/git_repos/llm_skills/openspec/specs/xiaohongshu-search-clarification/spec.md\":*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(git checkout:*)",
+      "Bash(rm:*)"
     ]
   }
 }
