@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from selectors import XHSSelectors as S
 
-from playwright.sync_api import sync_playwright, Page, BrowserContext, TimeoutError as PwTimeout
+from playwright.sync_api import sync_playwright, Page, TimeoutError as PwTimeout
 
 # Windows 兼容：强制 UTF-8 输出
 if sys.platform == "win32":
@@ -85,10 +85,7 @@ class XHSScraper:
 
             page = ctx.new_page()
 
-            # 1) 登录
-            self._ensure_login(page, ctx)
-
-            # 2) 搜索 + 抓取（均分 + 回收策略）
+            # 1) 搜索 + 抓取（均分 + 回收策略）
             all_posts = []
             seen = set()
             remaining_total = self.max_posts
@@ -104,7 +101,7 @@ class XHSScraper:
                 all_posts.extend(posts)
                 remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
 
-            # 3) 输出
+            # 2) 输出
             output_data = {
                 "search_time": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "keywords": keywords,
@@ -122,59 +119,27 @@ class XHSScraper:
             ctx.close()
             browser.close()
 
-    # ------------------------------------------------------------------
-    # 登录
-    # ------------------------------------------------------------------
-    def _ensure_login(self, page: Page, ctx: BrowserContext):
-        print("[*] 检查登录状态…")
-        page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
-        self._sleep(2, 4)
-
-        # 如果搜索框存在且没有登录弹窗 → 已登录
+    def _is_not_logged_in(self, page: Page) -> bool:
+        if "login" in page.url.lower():
+            return True
         try:
-            page.wait_for_selector(S.SEARCH_INPUT, timeout=8000)
-            # 进一步确认：有没有"登录"按钮可见
+            login_modal = page.locator(S.LOGIN_MODAL)
+            if login_modal.count() > 0 and login_modal.first.is_visible():
+                return True
+            qr_code = page.locator(S.QR_CODE_IMAGE)
+            if qr_code.count() > 0 and qr_code.first.is_visible():
+                return True
             login_btn = page.locator(f"text={S.LOGIN_BUTTON_TEXT}")
             if login_btn.count() > 0 and login_btn.first.is_visible():
-                self._qr_login(page, ctx)
-            else:
-                print("[*] 已登录 ✓")
-        except PwTimeout:
-            self._qr_login(page, ctx)
+                return True
+        except Exception:
+            pass
+        return False
 
-    def _qr_login(self, page: Page, ctx: BrowserContext):
-        print("[!] 需要扫码登录")
-        login_btn = page.locator(f"text={S.LOGIN_BUTTON_TEXT}")
-        if login_btn.count() > 0 and login_btn.first.is_visible():
-            login_btn.first.click()
-            self._sleep(1, 2)
-
-        try:
-            # 等待二维码图片出现，确保整个登录框也已经渲染
-            page.wait_for_selector(S.QR_CODE_IMAGE, state="visible", timeout=15000)
-            self._sleep(1, 2)  # 给一点时间让 CSS 淡入/滑入动画完成
-            
-            # 截取整个登录面板而非仅仅二维码图片，增加容错率，避免截出半张图
-            modal = page.locator(S.LOGIN_MODAL)
-            qr_path = os.path.abspath("xhs_qr_login.png")
-            modal.screenshot(path=qr_path)
-            print(f"[!] 请扫码: {qr_path}")
-
-            # 等待登录完成（登录框消失）
-            page.wait_for_selector(S.LOGIN_MODAL, state="hidden", timeout=120000)
-            print("[*] 登录成功 ✓")
-
-            ctx.storage_state(path=self.auth_state_path)
-            print(f"[*] Cookie 已保存 → {self.auth_state_path}")
-            if os.path.exists(qr_path):
-                os.remove(qr_path)
-            self._sleep(2, 3)
-        except PwTimeout as e:
-            print(f"[✗] 扫码超时，退出。详情: {e}")
-            sys.exit(1)
-        except Exception as e:
-            print(f"[✗] 扫码过程中发生异常: {e}")
-            sys.exit(1)
+    @staticmethod
+    def _exit_not_logged_in():
+        print("[✗] 检测到未登录，请先执行 xiaohongshu-login skill")
+        sys.exit(1)
 
     # ------------------------------------------------------------------
     # 搜索
@@ -185,10 +150,14 @@ class XHSScraper:
             f"?keyword={keyword}&source=web_search_result_notes"
         )
         page.goto(url, wait_until="domcontentloaded")
+        if self._is_not_logged_in(page):
+            self._exit_not_logged_in()
 
         try:
             page.wait_for_selector(S.POST_CARD, timeout=10000)
         except PwTimeout:
+            if self._is_not_logged_in(page):
+                self._exit_not_logged_in()
             print("  [!] 搜索结果加载超时")
             return []
 
@@ -240,9 +209,13 @@ class XHSScraper:
     def _extract_post(self, page: Page, url: str) -> dict | None:
         try:
             page.goto(url, wait_until="domcontentloaded")
+            if self._is_not_logged_in(page):
+                self._exit_not_logged_in()
             page.wait_for_selector("#detail-title, .title, .note-content", timeout=10000)
             self._sleep(1, 2)
         except PwTimeout:
+            if self._is_not_logged_in(page):
+                self._exit_not_logged_in()
             print("    [!] 帖子加载超时，跳过")
             return None
 
