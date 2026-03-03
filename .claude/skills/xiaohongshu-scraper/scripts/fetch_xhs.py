@@ -36,7 +36,7 @@ class XHSScraper:
         self.max_posts = min(max_posts, 100)  # 硬上限 100
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
-            '.agent/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
+            '.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
         )
         Path(self.auth_state_path).parent.mkdir(parents=True, exist_ok=True)
 
