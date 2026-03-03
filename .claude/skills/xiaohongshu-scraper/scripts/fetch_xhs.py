@@ -25,7 +25,7 @@ load_dotenv()
 
 
 class XHSScraper:
-    def __init__(self, headless: bool = None, max_posts: int = 10):
+    def __init__(self, headless: bool = None, max_posts: int = 10, search_strategy: list = None):
         self.headless = headless
         if self.headless is None:
             if sys.platform != 'win32' and not os.environ.get('DISPLAY'):
@@ -34,6 +34,7 @@ class XHSScraper:
                 self.headless = False
 
         self.max_posts = min(max_posts, 100)  # 硬上限 100
+        self.search_strategy = search_strategy if search_strategy is not None else []
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
             '.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
@@ -98,7 +99,13 @@ class XHSScraper:
                 remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
 
             # 3) 输出
-            out = json.dumps(all_posts, ensure_ascii=False, indent=2)
+            output_data = {
+                "search_time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "keywords": keywords,
+                "search_strategy": self.search_strategy,
+                "posts": all_posts,
+            }
+            out = json.dumps(output_data, ensure_ascii=False, indent=2)
             if output_file:
                 Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                 Path(output_file).write_text(out, encoding="utf-8")
@@ -292,12 +299,27 @@ if __name__ == "__main__":
                         help="JSON 输出文件路径")
     parser.add_argument("--headless", action="store_true",
                         help="强制无头模式")
+    parser.add_argument("--search-strategy", default="",
+                        help="搜索策略 JSON 字符串，包含 keyword、posts_count、intent")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
 
+    # 解析 search_strategy 参数
+    search_strategy = []
+    if args.search_strategy:
+        try:
+            search_strategy = json.loads(args.search_strategy)
+            if not isinstance(search_strategy, list):
+                print("[!] search_strategy 必须是数组格式")
+                sys.exit(1)
+        except json.JSONDecodeError as e:
+            print(f"[!] search_strategy JSON 格式错误: {e}")
+            sys.exit(1)
+
     scraper = XHSScraper(
         headless=True if args.headless else None,
         max_posts=args.max_posts,
+        search_strategy=search_strategy,
     )
     scraper.run(keywords=kws, output_file=args.output)
