@@ -371,6 +371,27 @@ python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
 
 ---
 
+### 步骤 4：调用格式化 Skill（必须执行）
+
+**[核心要求]** 生成 `_index.md` 后，**必须调用** `xiaohongshu-formatter` skill 对报告进行格式美化，增强 emoji 使用。
+
+**调用方式：**
+
+```
+/skill xiaohongshu-formatter --dir "data/xiaohongshu/YYYYMMDD_HHmmSS_搜索主旨"
+```
+
+**formatter 的作用：**
+- 按照统一规范增强报告的 emoji 使用
+- 提升报告的趣味性和可读性
+- 保持内容完整性，只修改格式
+
+**执行完成后：**
+- 将格式化后的报告原文直接发送到用户对话框
+- 告知用户报告已保存至搜索目录
+
+---
+
 ## 📄 增强版汇总报告模板
 
 ```markdown
