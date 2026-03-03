@@ -20,6 +20,12 @@ from selectors import XHSSelectors as S
 
 from playwright.sync_api import sync_playwright, Page, BrowserContext, TimeoutError as PwTimeout
 
+# Windows 兼容：强制 UTF-8 输出
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 # 加载环境变量
 load_dotenv()
 
