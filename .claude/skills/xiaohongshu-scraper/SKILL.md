@@ -269,6 +269,7 @@ python .claude/skills/xiaohongshu-login/scripts/login_xhs.py
 ```bash
 python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
     --keywords "关键词1,关键词2,关键词3" \
+    --max-posts 30 \
     --search-strategy '[{"keyword":"关键词1","posts_count":10,"intent":"获取整体推荐趋势"},{"keyword":"关键词2","posts_count":10,"intent":"获取探店体验"},{"keyword":"关键词3","posts_count":10,"intent":"了解避坑指南"}]' \
     --output "data/xiaohongshu/YYYYMMDD_HHmmSS_搜索主旨/raw.json"
 ```
@@ -277,11 +278,11 @@ python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
 - 使用 Python 的 `json.dumps()` 将 `search_strategy` 列表转换为 JSON 字符串
 - 示例：`json.dumps([{"keyword": "北京咖啡厅推荐", "posts_count": 10, "intent": "获取整体推荐趋势"}, ...])`
 
-**可选参数：**
-- `--max-posts N`：指定帖子上限（**默认 30**，硬上限 100）
+**参数说明：**
+- `--max-posts N`：**脚本必传参数**，Agent 调用时用户未修改篇数则传 30（硬上限 100）
 - `--output PATH`：**必须**指定输出到搜索目录下的 raw.json
 - `--search-strategy JSON`：搜索策略元数据（包含 keyword、posts_count、intent 的数组）
-- `--headless`：强制无头模式
+- `--headless`：强制无头模式（可选）
 
 **[参考信息]** ⏱️ 过程可能需要几分钟（为了防反爬，脚本内置随机延时）。
 
@@ -516,14 +517,14 @@ python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
 以下命令供直接调用脚本时参考：
 
 ```bash
-# 基础搜索 (默认上限 20 篇结果)
-python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "2026年春季穿搭"
+# 基础搜索 (必须指定 --max-posts)
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "2026年春季穿搭" --max-posts 30
 
 # 多词联合搜索并指定输出文件, 指定上限 50 篇（硬上限 100）
 python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "春装搭配,早春outfit" --max-posts 50 --output "data/tmp_xhs_raw.json"
 
 # 强制开启无头模式 (通常在 Linux 环境下或不需要看到浏览器弹窗时)
-python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "咖啡拉花教程" --headless
+python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py --keywords "咖啡拉花教程" --max-posts 20 --headless
 ```
 
 **登录前置说明：**
