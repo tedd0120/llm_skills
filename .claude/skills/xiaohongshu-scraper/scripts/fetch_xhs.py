@@ -272,8 +272,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--keywords", required=True,
                         help="搜索关键词，多个用逗号分隔")
-    parser.add_argument("--max-posts", type=int, default=20,
-                        help="最多抓取帖子数 (默认 20, 上限 100)")
+    parser.add_argument("--max-posts", type=int, required=True,
+                        help="最多抓取帖子数 (上限 100)")
     parser.add_argument("--output", default="",
                         help="JSON 输出文件路径")
     parser.add_argument("--headless", action="store_true",
