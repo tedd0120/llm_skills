@@ -34,10 +34,10 @@ TEAMS_GROUP_CODES=群组A,群组B,群组C
 
 ```bash
 # 1) 查询指定群组并保存 JSON
-python .agent/skills/teams-group-members/scripts/fetch_group_members.py --group FhSnheH3T_grT5yzxqVS5o --output data/single_group_members.json
+python .claude/skills/teams-group-members/scripts/fetch_group_members.py --group FhSnheH3T_grT5yzxqVS5o --output data/single_group_members.json
 
 # 2) 按 .env 中 TEAMS_GROUP_CODES 批量抓取并保存 JSON
-python .agent/skills/teams-group-members/scripts/fetch_group_members.py --output data/all_groups_members.json
+python .claude/skills/teams-group-members/scripts/fetch_group_members.py --output data/all_groups_members.json
 ```
 
 每次抓取会默认生成 HTML：

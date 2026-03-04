@@ -39,7 +39,7 @@
 ## 🛠️ 项目结构
 
 ```
-.agent/skills/
+.claude/skills/
 ├── finance-data-*/         # 金融相关技能集
 ├── teams-attendance/       # 考勤自动化技能
 ├── teams-group-members/    # 群组成员与组织树技能

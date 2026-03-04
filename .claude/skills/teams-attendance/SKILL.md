@@ -28,13 +28,13 @@ TEAMS_AUTHORIZATION=你的授权令牌
 
 ```bash
 # 查询当前月份
-python .agent/skills/teams-attendance/scripts/fetch_attendance.py
+python .claude/skills/teams-attendance/scripts/fetch_attendance.py
 
 # 查询指定月份
-python .agent/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01
+python .claude/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01
 
 # 导出CSV到指定路径
-python .agent/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01 --output ./data/attendance_202601.csv
+python .claude/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01 --output ./data/attendance_202601.csv
 ```
 
 ### 代码调用
