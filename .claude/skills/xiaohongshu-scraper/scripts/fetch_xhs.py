@@ -77,9 +77,9 @@ class XHSScraper:
             if os.path.exists(self.auth_state_path):
                 try:
                     ctx = browser.new_context(storage_state=self.auth_state_path)
-                    print(f"[*] Cookie 已加载: {self.auth_state_path}")
+                    print(f"[*] Cookie 已加载: {self.auth_state_path}", flush=True)
                 except Exception as e:
-                    print(f"[!] Cookie 加载失败: {e}")
+                    print(f"[!] Cookie 加载失败: {e}", flush=True)
             if ctx is None:
                 ctx = browser.new_context()
 
@@ -96,7 +96,7 @@ class XHSScraper:
                 quota = remaining_total // remaining_kws  # 均分
                 if remaining_total % remaining_kws != 0:
                     quota += 1  # 余数给当前关键词多 1 篇
-                print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})")
+                print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})", flush=True)
                 posts = self._search_keyword(page, kw, quota, seen)
                 all_posts.extend(posts)
                 remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
@@ -112,7 +112,7 @@ class XHSScraper:
             if output_file:
                 Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                 Path(output_file).write_text(out, encoding="utf-8")
-                print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}")
+                print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
             else:
                 print("\n" + out)
 
@@ -138,7 +138,7 @@ class XHSScraper:
 
     @staticmethod
     def _exit_not_logged_in():
-        print("[✗] 检测到未登录，请先执行 xiaohongshu-login skill")
+        print("[✗] 检测到未登录，请先执行 xiaohongshu-login skill", flush=True)
         sys.exit(1)
 
     # ------------------------------------------------------------------
@@ -158,7 +158,7 @@ class XHSScraper:
         except PwTimeout:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
-            print("  [!] 搜索结果加载超时")
+            print("  [!] 搜索结果加载超时", flush=True)
             return []
 
         self._sleep(2, 4)
@@ -192,11 +192,11 @@ class XHSScraper:
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             self._sleep(2, 4)
 
-        print(f"  找到 {len(hrefs)} 篇（去重后），抓前 {limit} 篇")
+        print(f"  找到 {len(hrefs)} 篇（去重后），抓前 {limit} 篇", flush=True)
 
         results = []
         for i, post_url in enumerate(hrefs[:limit]):
-            print(f"  [{i+1}/{min(limit,len(hrefs))}] {post_url[:80]}…")
+            print(f"  [{i+1}/{min(limit,len(hrefs))}] {post_url[:80]}…", flush=True)
             data = self._extract_post(page, post_url)
             if data:
                 results.append(data)
@@ -216,7 +216,7 @@ class XHSScraper:
         except PwTimeout:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
-            print("    [!] 帖子加载超时，跳过")
+            print("    [!] 帖子加载超时，跳过", flush=True)
             return None
 
         title   = self._txt(page, "#detail-title") or self._txt(page, ".title")
@@ -290,10 +290,10 @@ if __name__ == "__main__":
         try:
             search_strategy = json.loads(args.search_strategy)
             if not isinstance(search_strategy, list):
-                print("[!] search_strategy 必须是数组格式")
+                print("[!] search_strategy 必须是数组格式", flush=True)
                 sys.exit(1)
         except json.JSONDecodeError as e:
-            print(f"[!] search_strategy JSON 格式错误: {e}")
+            print(f"[!] search_strategy JSON 格式错误: {e}", flush=True)
             sys.exit(1)
 
     scraper = XHSScraper(
