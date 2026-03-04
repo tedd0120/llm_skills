@@ -260,23 +260,46 @@ python .claude/skills/xiaohongshu-login/scripts/login_xhs.py
 
 ---
 
-### 步骤 2：执行抓取脚本
+### 步骤 2：执行抓取脚本（后台运行）
 
-调用 `fetch_xhs.py` 获取原始数据。
+调用 `fetch_xhs.py` 获取原始数据。**必须使用后台运行模式**。
 
-**命令格式：**
+**2.1 启动后台抓取任务**
 
 ```bash
-python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
+# 使用后台模式启动，保存 task_id
+# 命令会立即返回 task_id，不会阻塞
+TASK_ID=$(python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
     --keywords "关键词1,关键词2,关键词3" \
     --max-posts 30 \
     --search-strategy '[{"keyword":"关键词1","posts_count":10,"intent":"获取整体推荐趋势"},{"keyword":"关键词2","posts_count":10,"intent":"获取探店体验"},{"keyword":"关键词3","posts_count":10,"intent":"了解避坑指南"}]' \
-    --output "data/xiaohongshu/YYYYMMDD_HHmmSS_搜索主旨/raw.json"
+    --output "data/xiaohongshu/YYYYMMDD_HHmmSS_搜索主旨/raw.json")
 ```
 
-**构建 --search-strategy 参数**：
-- 使用 Python 的 `json.dumps()` 将 `search_strategy` 列表转换为 JSON 字符串
-- 示例：`json.dumps([{"keyword": "北京咖啡厅推荐", "posts_count": 10, "intent": "获取整体推荐趋势"}, ...])`
+**2.2 等待完成并处理结果**
+
+使用 `TaskOutput` 等待后台任务完成并获取完整输出。
+
+```
+final_output = TaskOutput(TASK_ID, block=true)  # 等待完成
+
+if exit_code != 0:
+    if "检测到未登录" in final_output:
+        提示用户执行 xiaohongshu-login skill
+    else:
+        展示错误信息并停止任务
+else:
+    # 任务成功完成，向用户展示简短完成消息
+    告知用户抓取完成，即将生成报告
+```
+
+**进度输出格式**（由脚本输出，供参考）：
+```
+[*] 搜索关键词: xxx (配额 N, 总剩余 M)
+  找到 X 篇（去重后），抓前 Y 篇
+  [i/total] URL...
+[✓] 共 N 篇 → output_file
+```
 
 **参数说明：**
 - `--max-posts N`：**脚本必传参数**，Agent 调用时用户未修改篇数则传 30（硬上限 100）
@@ -284,7 +307,7 @@ python .claude/skills/xiaohongshu-scraper/scripts/fetch_xhs.py \
 - `--search-strategy JSON`：搜索策略元数据（包含 keyword、posts_count、intent 的数组）
 - `--headless`：强制无头模式（可选）
 
-**[参考信息]** ⏱️ 过程可能需要几分钟（为了防反爬，脚本内置随机延时）。
+**[核心要求]** 必须使用 `run_in_background=true` 启动任务，禁止阻塞调用。
 
 ---
 
