@@ -1,15 +1,21 @@
 ---
 name: xiaohongshu-scraper
-description: 搜索并总结小红书内容（严格遵守分层约束）
+description: 小红书内容抓取与分析（一站式入口）
 license: MIT
 metadata:
   author: llm-skills
-  version: "3.2"
+  version: "4.0"
 ---
 
 # 小红书内容抓取 Skill
 
-通过自动化浏览器（Playwright）抓取小红书上的帖子正文和评论区内容。作为 Agent，你需要调用此 Skill 提供的脚本获取原始数据，然后将数据进行 AI 总结并整理输出。
+一站式小红书内容抓取与分析入口。作为编排层，协调各个子 skills 完成从数据抓取到报告生成的完整流程。
+
+**内部架构**：
+- `xiaohongshu-fetch` - 内部抓取组件（仅 scraper 调用）
+- `xiaohongshu-summarize` - 报告生成组件
+- `xiaohongshu-formatter` - 格式化组件
+- `xiaohongshu-login` - 登录管理组件
 
 ---
 
@@ -158,7 +164,44 @@ metadata:
 
 ### 阶段二：执行阶段（确认后进入）
 
-此阶段执行实际的爬虫操作和报告生成。详细步骤见后文"Agent 执行详细步骤"。
+此阶段编排各个子 skills 完成数据抓取和报告生成。
+
+#### 完整流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    xiaohongshu-scraper (编排层)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 澄清阶段（固定/发散模式）                                    │
+│     → 用户确认关键词或参数                                      │
+│     → 创建 OUTPUT_DIR                                        │
+│                                                             │
+│  2. 检查登录 → xiaohongshu-login --check-only              │
+│     → 如未登录则提示用户执行 xiaohongshu-login               │
+│                                                             │
+│  3. 抓取数据 → xiaohongshu-fetch                            │
+│     固定模式：单次调用 → raw.json                            │
+│     发散模式：多轮循环 → raw_round_N.json → 合并 → raw.json    │
+│                                                             │
+│  4. 生成报告 → xiaohongshu-summarize --dir $OUTPUT_DIR      │
+│     → 读取 raw.json，生成 _index.md                          │
+│                                                             │
+│  5. 格式化 → xiaohongshu-formatter --dir $OUTPUT_DIR         │
+│     → 增强 emoji，美化格式                                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 上下文传递
+
+scraper 通过 `OUTPUT_DIR` 环境变量在子 skills 间传递上下文：
+
+| 参数 | 类型 | 说明 | 传递给 |
+|------|------|------|--------|
+| `OUTPUT_DIR` | string | 搜索目录路径 | fetch, summarize, formatter |
+| `search_strategy` | array | 固定模式搜索策略 | fetch |
+| `divergence_params` | object | 发散模式参数配置 | fetch |
 
 ---
 
