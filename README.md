@@ -24,7 +24,13 @@
 
 ### 🔍 社交媒体 (Social Media)
 
-*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 通过 Playwright 自动化浏览器抓取小红书帖子正文与评论区内容。支持 QR 码扫码登录、Cookie 持久化、多关键词搜索与去重、反风控策略。Agent 层自动生成衍生搜索词并对原始内容进行 AI 总结，按帖子输出独立 Markdown 文件。`_index.md` 默认要求输出“深度汇总报告”（含单篇结构化摘要、跨帖共识/分歧、风险与信息缺口），禁止“一句话判语”或纯榜单式收尾。跨平台支持 Windows (msedge) 和 Linux (Xvfb 虚拟显示器)。
+*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 一站式小红书内容抓取与分析入口。支持两种搜索模式：**固定关键词模式**（用户确认关键词后一次性搜索）和 **发散模式**（AI 自动多轮搜索，每轮动态决策下一关键词）。内置随机延时反风控机制，支持 Cookie 持久化、跨轮去重、超链接格式输出。自动生成结构化分析报告，包含品牌声量、评论区共识、场景化决策建议等板块。
+
+    **模块化架构**：
+    - [`xiaohongshu-login`] - 登录管理与 Cookie 校验
+    - [`xiaohongshu-fetch`] - 数据抓取（内部组件）
+    - [`xiaohongshu-summarize`] - AI 报告生成
+    - [`xiaohongshu-formatter`] - 报告格式美化
 
 ## 🚀 使用指南
 
@@ -43,7 +49,7 @@
 ├── finance-data-*/         # 金融相关技能集
 ├── teams-attendance/       # 考勤自动化技能
 ├── teams-group-members/    # 群组成员与组织树技能
-└── xiaohongshu-scraper/    # 小红书内容抓取与AI总结技能
+└── xiaohongshu-*/          # 小红书技能集（scraper, fetch, summarize, formatter, login）
 data/                       # 本地数据存储目录（已添加至 .gitignore）
 openspec/                   # 开放规范文档
 ```
