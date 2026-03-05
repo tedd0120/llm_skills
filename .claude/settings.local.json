@@ -17,7 +17,8 @@
       "Bash(\"P:/git_repos/llm_skills/openspec/specs/xiaohongshu-search-clarification/spec.md\":*)",
       "Bash(cp:*)",
       "Bash(git checkout:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "mcp__web-search-prime__webSearchPrime"
     ]
   }
 }
