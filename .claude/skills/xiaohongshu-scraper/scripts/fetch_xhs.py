@@ -37,6 +37,7 @@ class XHSScraper:
         max_posts: int = 10,
         search_strategy: list = None,
         seen_ids_path: str = "",
+        hyperlinks: bool = False,  # 是否启用超链接功能
     ):
         self.headless = headless
         if self.headless is None:
@@ -48,6 +49,7 @@ class XHSScraper:
         self.max_posts = min(max_posts, 100)  # 硬上限 100
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
+        self.hyperlinks = hyperlinks  # 超链接功能开关
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
             '.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
@@ -143,6 +145,24 @@ class XHSScraper:
                 Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                 Path(output_file).write_text(out, encoding="utf-8")
                 print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
+
+                # 生成 id_url_map.json（超链接启用时）
+                if self.hyperlinks and output_file:
+                    id_url_map = {}
+                    for post in all_posts:
+                        post_id = post.get("post_id", "")
+                        url = post.get("url", "")
+                        if post_id and url:
+                            id_url_map[post_id] = url
+
+                    if id_url_map:
+                        output_dir = Path(output_file).parent
+                        map_file = output_dir / "id_url_map.json"
+                        map_file.write_text(
+                            json.dumps(id_url_map, ensure_ascii=False, indent=2),
+                            encoding="utf-8"
+                        )
+                        print(f"[✓] ID-URL 映射 → {map_file}", flush=True)
             else:
                 print("\n" + out)
 
@@ -261,6 +281,14 @@ class XHSScraper:
         # 评论
         comments = self._extract_comments(page)
 
+        # 从 URL 中提取帖子 ID
+        # URL 格式: https://www.xiaohongshu.com/explore/{note_id} 或 /discovery/item/{note_id}
+        post_id = ""
+        if url:
+            # 去除查询参数和尾部斜杠
+            clean_url = url.rstrip("/").split("?")[0]
+            post_id = clean_url.split("/")[-1] if clean_url else ""
+
         return {
             "title":    title,
             "content":  content,
@@ -270,6 +298,8 @@ class XHSScraper:
             "collects": collects,
             "comments_count": chat,
             "comments": comments,
+            "url":      url,      # 保存完整 URL
+            "post_id":  post_id,  # 保存帖子 ID
         }
 
     def _extract_comments(self, page: Page) -> list[str]:
@@ -313,6 +343,8 @@ if __name__ == "__main__":
                         help="搜索策略 JSON 字符串，包含 keyword、posts_count、intent")
     parser.add_argument("--seen-ids", default="",
                         help="跨调用去重文件路径（每行一个 note_id）")
+    parser.add_argument("--hyperlinks", action="store_true",
+                        help="启用超链接功能，生成 id_url_map.json")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
@@ -334,5 +366,6 @@ if __name__ == "__main__":
         max_posts=args.max_posts,
         search_strategy=search_strategy,
         seen_ids_path=args.seen_ids,
+        hyperlinks=args.hyperlinks,
     )
     scraper.run(keywords=kws, output_file=args.output)
