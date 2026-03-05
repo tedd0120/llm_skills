@@ -31,7 +31,13 @@ load_dotenv()
 
 
 class XHSScraper:
-    def __init__(self, headless: bool = None, max_posts: int = 10, search_strategy: list = None):
+    def __init__(
+        self,
+        headless: bool = None,
+        max_posts: int = 10,
+        search_strategy: list = None,
+        seen_ids_path: str = "",
+    ):
         self.headless = headless
         if self.headless is None:
             if sys.platform != 'win32' and not os.environ.get('DISPLAY'):
@@ -41,6 +47,7 @@ class XHSScraper:
 
         self.max_posts = min(max_posts, 100)  # 硬上限 100
         self.search_strategy = search_strategy if search_strategy is not None else []
+        self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
             '.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
@@ -60,6 +67,26 @@ class XHSScraper:
         if loc.count() > 0:
             return loc.first.text_content().strip()
         return default
+
+    def _load_seen_ids(self) -> set:
+        if not self.seen_ids_path:
+            return set()
+
+        self.seen_ids_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.seen_ids_path.exists():
+            self.seen_ids_path.touch()
+            return set()
+
+        content = self.seen_ids_path.read_text(encoding="utf-8")
+        return {line.strip() for line in content.splitlines() if line.strip()}
+
+    def _append_seen_ids(self, new_ids: set):
+        if not self.seen_ids_path or not new_ids:
+            return
+
+        payload = "".join(f"{note_id}\n" for note_id in sorted(new_ids))
+        with self.seen_ids_path.open("a", encoding="utf-8") as f:
+            f.write(payload)
 
     # ------------------------------------------------------------------
     # 入口
@@ -87,7 +114,8 @@ class XHSScraper:
 
             # 1) 搜索 + 抓取（均分 + 回收策略）
             all_posts = []
-            seen = set()
+            seen = self._load_seen_ids()
+            new_seen_ids = set()
             remaining_total = self.max_posts
             for idx, kw in enumerate(keywords):
                 if remaining_total <= 0:
@@ -97,9 +125,11 @@ class XHSScraper:
                 if remaining_total % remaining_kws != 0:
                     quota += 1  # 余数给当前关键词多 1 篇
                 print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})", flush=True)
-                posts = self._search_keyword(page, kw, quota, seen)
+                posts = self._search_keyword(page, kw, quota, seen, new_seen_ids)
                 all_posts.extend(posts)
                 remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
+
+            self._append_seen_ids(new_seen_ids)
 
             # 2) 输出
             output_data = {
@@ -144,7 +174,7 @@ class XHSScraper:
     # ------------------------------------------------------------------
     # 搜索
     # ------------------------------------------------------------------
-    def _search_keyword(self, page: Page, keyword: str, limit: int, seen: set) -> list:
+    def _search_keyword(self, page: Page, keyword: str, limit: int, seen: set, new_seen_ids: set) -> list:
         url = (
             f"https://www.xiaohongshu.com/search_result"
             f"?keyword={keyword}&source=web_search_result_notes"
@@ -177,6 +207,7 @@ class XHSScraper:
                 note_id = href.split("/")[-1].split("?")[0]
                 if note_id not in seen:
                     seen.add(note_id)
+                    new_seen_ids.add(note_id)
                     hrefs.append(full)
 
             # 已经收集到足够的链接，停止滚动
@@ -280,6 +311,8 @@ if __name__ == "__main__":
                         help="强制无头模式")
     parser.add_argument("--search-strategy", default="",
                         help="搜索策略 JSON 字符串，包含 keyword、posts_count、intent")
+    parser.add_argument("--seen-ids", default="",
+                        help="跨调用去重文件路径（每行一个 note_id）")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
@@ -300,5 +333,6 @@ if __name__ == "__main__":
         headless=True if args.headless else None,
         max_posts=args.max_posts,
         search_strategy=search_strategy,
+        seen_ids_path=args.seen_ids,
     )
     scraper.run(keywords=kws, output_file=args.output)
