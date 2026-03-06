@@ -24,7 +24,7 @@ metadata:
 | 字段 | 说明 |
 |------|------|
 | `search_time` | 执行时间 |
-| `posts` | 帖子数组（每个帖子包含 title, content, author, date, likes, collects, comments_count, comments）|
+| `posts` | 帖子数组（每个帖子包含 note_id, url, title, content, author, date, likes, collects, comments_count, comments）|
 | `search_strategy` | 搜索策略（固定模式，可选）|
 | `divergence_path` | 发散路径（发散模式，可选）|
 

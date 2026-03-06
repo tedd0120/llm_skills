@@ -70,6 +70,4 @@ python .claude/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
 |------|------|
 | `search_time` | 执行时间 |
 | `keywords` | 搜索关键词列表 |
-| `posts` | 帖子数组，每个帖子包含：title, content, author, date, likes, collects, comments_count, comments |
-
-**注意**：输出不包含 `url` 字段。
+| `posts` | 帖子数组，每个帖子包含：note_id, url, title, content, author, date, likes, collects, comments_count, comments |

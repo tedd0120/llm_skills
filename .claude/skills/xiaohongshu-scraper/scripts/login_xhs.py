@@ -4,7 +4,6 @@
 """
 
 import argparse
-import importlib.util
 import io
 import os
 import sys
@@ -14,14 +13,9 @@ from dotenv import load_dotenv
 from playwright.sync_api import TimeoutError as PwTimeout
 from playwright.sync_api import sync_playwright
 
-# 复用 scraper 的 selectors，避免重复维护
-SCRAPER_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "xiaohongshu-scraper" / "scripts"
-SELECTORS_PATH = SCRAPER_SCRIPTS_DIR / "selectors.py"
-selectors_spec = importlib.util.spec_from_file_location("xhs_shared_selectors", SELECTORS_PATH)
-selectors_module = importlib.util.module_from_spec(selectors_spec)
-assert selectors_spec and selectors_spec.loader
-selectors_spec.loader.exec_module(selectors_module)
-S = selectors_module.XHSSelectors
+# 导入同目录下的选择器
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from selectors import XHSSelectors as S
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
