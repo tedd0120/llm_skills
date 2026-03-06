@@ -81,10 +81,10 @@
 
    如果 `id_url_map.json` 文件存在：
 
-   - 读取 ID-URL 映射文件
-   - 将报告中的所有 `(id:{post_id})` 占位符替换为实际 URL
+   - 读取 ID-URL 映射文件，获取所有有效的 post_id
+   - 将报告中的所有 `(id:{post_id})` 占位符替换为帖子详情页 URL
    - 替换格式：`(id:{post_id})` → `(https://www.xiaohongshu.com/explore/{post_id})`
-   - 使用映射文件中的完整 URL（而非重构）
+   - 映射文件用于验证 post_id 存在性，URL 使用 `explore` 格式构造（映射文件中存储的是 search_result 格式，不适合作为帖子链接）
 
    **替换示例：**
 

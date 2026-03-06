@@ -261,15 +261,20 @@ class XHSScraper:
         # 评论
         comments = self._extract_comments(page)
 
+        # 从 url 提取 note_id
+        note_id = url.split("/")[-1].split("?")[0]
+
         return {
-            "title":    title,
-            "content":  content,
-            "author":   author,
-            "date":     date,
-            "likes":    likes,
-            "collects": collects,
+            "note_id":      note_id,
+            "url":          url,
+            "title":        title,
+            "content":      content,
+            "author":       author,
+            "date":         date,
+            "likes":        likes,
+            "collects":     collects,
             "comments_count": chat,
-            "comments": comments,
+            "comments":     comments,
         }
 
     def _extract_comments(self, page: Page) -> list[str]:

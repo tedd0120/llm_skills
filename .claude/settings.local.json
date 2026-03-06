@@ -18,7 +18,11 @@
       "Bash(cp:*)",
       "Bash(git checkout:*)",
       "Bash(rm:*)",
-      "mcp__web-search-prime__webSearchPrime"
+      "mcp__web-search-prime__webSearchPrime",
+      "mcp__zread__get_repo_structure",
+      "Bash(sqlite3:*)",
+      "Bash(openspec-cn archive:*)",
+      "Bash(printf y\\\\nY\\\\n:*)"
     ]
   }
 }
