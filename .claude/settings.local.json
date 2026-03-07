@@ -22,7 +22,8 @@
       "mcp__zread__get_repo_structure",
       "Bash(sqlite3:*)",
       "Bash(openspec-cn archive:*)",
-      "Bash(printf y\\\\nY\\\\n:*)"
+      "Bash(printf y\\\\nY\\\\n:*)",
+      "Bash(do:*)"
     ]
   }
 }
