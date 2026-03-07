@@ -479,3 +479,98 @@ Agent 在发散搜索过程中必须输出进度信息。
 - **当** 一轮搜索完成并决定下一个关键词
 - **那么** 应当输出：`[发散决策] 下一关键词: xxx | 理由: xxx`
 
+---
+
+## 新增需求 (来自 xhs-skills-split)
+
+### 需求: 抓取逻辑迁移到 fetch 组件
+scraper 必须不再直接包含抓取逻辑，而是调用 xiaohongshu-fetch 内部组件。
+
+#### 场景: 固定关键词模式
+- **当** 用户选择固定关键词模式（模式 A）
+- **那么** scraper 必须完成澄清阶段并创建 OUTPUT_DIR
+- **并且** scraper 必须调用 xiaohongshu-fetch，传入：
+  - `--keywords`: 用户确认的关键词列表
+  - `--max-posts`: 篇数上限
+  - `--output`: `$OUTPUT_DIR/raw.json`
+  - `--search-strategy`: 搜索策略 JSON
+- **并且** scraper 必须等待 fetch 完成后继续
+
+### 需求: 报告生成迁移到 summarize 组件
+scraper 必须不再直接生成报告，而是调用 xiaohongshu-summarize 组件。
+
+#### 场景: 调用 summarize
+- **当** fetch 完成并产出 raw.json
+- **那么** scraper 必须调用 xiaohongshu-summarize，传入：
+  - `--dir`: `$OUTPUT_DIR`
+- **并且** scraper 必须等待 summarize 完成
+
+### 需求: 完整流程编排
+scraper 必须按以下顺序编排完整流程。
+
+#### 场景: 一站式流程
+- **当** 用户调用 `/xiaohongshu-scraper`
+- **那么** scraper 必须按以下顺序执行：
+  1. 澄清阶段（模式选择、关键词确认）
+  2. 创建 OUTPUT_DIR
+  3. 检查登录 → `xiaohongshu-login --check-only`
+  4. 抓取数据 → `xiaohongshu-fetch`
+  5. 合并结果（发散模式）
+  6. 生成报告 → `xiaohongshu-summarize --dir $OUTPUT_DIR`
+  7. 格式化 → `xiaohongshu-formatter --dir $OUTPUT_DIR`
+
+---
+
+## 新增需求 (来自 simplify-xhs-scraper-doc)
+
+### 需求: SKILL.md 必须明确编排层职责边界
+xiaohongshu-scraper 的 SKILL.md 必须仅包含编排层相关内容，子 skill 仅用一句话概括功能并引用其文档。
+
+#### 场景: 子 skill 概括格式
+- **当** SKILL.md 描述内部架构
+- **那么** 每个子 skill 必须使用一行描述：「`<skill-name>` - <一句话功能概括>（详见其 SKILL.md）」
+- **并且** 禁止在 SKILL.md 中重复子 skill 的详细规范
+
+### 需求: 核心要求清单必须聚焦编排层约束
+xiaohongshu-scraper 的核心要求清单必须仅包含编排层相关的约束，删除属于子 skill 的要求。
+
+#### 场景: 保留的编排层约束
+- **当** 编写核心要求清单
+- **那么** 必须保留：
+  1. 必须完成澄清阶段后才能进入执行阶段
+  2. 澄清阶段必须先执行模式选择
+  3. 模式 A 必须衍生关键词并获得用户确认
+  4. 模式 B 必须收集参数并展示配额预览
+  5. 用户确认后必须立即创建搜索目录
+  6. 目录时间戳必须使用当前系统时间
+  7. 生成报告后必须将原文发送到用户对话框
+
+---
+
+## 新增需求 (来自 xhs-tasks-enforcement)
+
+### 需求: SKILL.md 必须包含执行任务清单章节
+xiaohongshu-scraper 的 SKILL.md 必须包含「执行任务清单」章节，定义 tasks.md 的创建和验证流程。
+
+#### 场景: SKILL.md 包含 tasks 模板
+- **当** Agent 读取 xiaohongshu-scraper SKILL.md
+- **那么** 必须能找到「执行任务清单」章节
+- **并且** 该章节必须包含 tasks.md 模板内容
+
+### 需求: 核心要求必须包含 tasks 验证约束
+SKILL.md 的核心要求清单必须包含 tasks 创建和验证的强制约束。
+
+#### 场景: 核心要求包含 tasks 约束
+- **当** Agent 读取核心要求清单
+- **那么** 必须包含"进入阶段二后必须创建 tasks.md"的要求
+- **并且** 必须包含"每完成一项任务必须更新 tasks.md 打勾"的要求
+- **并且** 必须包含"阶段结束前必须执行 verify_tasks.py 验证"的要求
+
+### 需求: 编排层职责明确定义
+xiaohongshu-scraper 作为编排层，必须明确定义其职责为：检查登录、调用 fetch 抓取数据、调用 summarize 生成报告、调用 formatter 格式化报告、发送报告。
+
+#### 场景: 编排层职责清晰
+- **当** Agent 执行 xiaohongshu-scraper
+- **那么** Agent 必须按顺序执行：检查登录 → 抓取数据 → 生成报告 → 格式化报告 → 发送报告
+- **并且** 每个步骤完成后必须更新 tasks.md
+

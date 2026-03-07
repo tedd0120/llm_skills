@@ -173,6 +173,27 @@ metadata:
 
 此阶段编排各个子 skills 完成数据抓取和报告生成。
 
+**编排层职责**：检查登录 → 抓取数据 → 生成报告 → 格式化报告 → 发送报告
+
+#### 执行任务清单
+
+进入阶段二后，必须立即将以下内容写入 `{OUTPUT_DIR}/tasks.md`：
+
+```markdown
+## 执行任务清单
+
+- [ ] 检查登录状态
+- [ ] 抓取数据
+- [ ] 生成报告
+- [ ] 格式化报告
+- [ ] 发送报告
+```
+
+**核心要求**：
+- 每完成一项任务，必须立即更新 tasks.md 将对应的 `[ ]` 改为 `[x]`
+- 阶段二结束前，必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证全部完成
+- 验证失败必须报错中止，禁止发送未完成的报告
+
 #### 完整流程
 
 ```
@@ -186,23 +207,38 @@ metadata:
 │     → 创建 OUTPUT_DIR                                        │
 │       路径模板：data/xiaohongshu/YYYYMMDD_HHmmSS_主题/        │
 │                                                             │
-│  2. 检查登录                                                  │
+│  2. 创建任务清单                                               │
+│     → 写入 {OUTPUT_DIR}/tasks.md（5 项未勾选任务）             │
+│                                                             │
+│  3. 检查登录                                                  │
 │     → 调用 scripts/login_xhs.py --check-only                │
-│     → 返回 LOGIN_OK：继续执行                                 │
+│     → 返回 LOGIN_OK：打勾 ✓ 继续执行                          │
 │     → 返回其他状态：执行登录流程（显示二维码让用户扫码）          │
 │                                                             │
-│  3. 抓取数据 → xiaohongshu-fetch（详见其 SKILL.md）            │
+│  4. 抓取数据 → xiaohongshu-fetch                             │
 │     → 固定模式：单次调用 → raw.json                            │
 │     → 发散模式：多轮循环 → 合并 → raw.json                      │
-│     → 生成 id_url_map.json（从 raw.json 提取映射）            │
+│     → 生成 id_url_map.json                                   │
+│     → 打勾 ✓                                                 │
 │                                                             │
-│  4. 生成报告（描述性 skill）                                   │
-│     → 阅读 xiaohongshu-summarize/SKILL.md 了解报告模板         │
-│     → 读取 raw.json，按模板生成 _index.md                     │
+│  5. 生成报告 → xiaohongshu-summarize                          │
+│     → 阅读 SKILL.md 了解报告模板                               │
+│     → 读取 raw.json，生成 _index.md                           │
+│     → 打勾 ✓                                                 │
 │                                                             │
-│  5. 格式化（描述性 skill）                                    │
-│     → 阅读 xiaohongshu-formatter/SKILL.md 了解格式要求         │
+│  6. 格式化报告 → xiaohongshu-formatter                        │
+│     → 阅读 SKILL.md 了解格式要求                               │
 │     → 增强 emoji，替换超链接占位符                              │
+│     → 打勾 ✓                                                 │
+│                                                             │
+│  7. 发送报告                                                  │
+│     → 将最终报告发送到用户对话框                                 │
+│     → 打勾 ✓                                                 │
+│                                                             │
+│  8. 验证任务完成                                               │
+│     → 执行 scripts/verify_tasks.py                           │
+│     → 返回 TASKS_COMPLETE：成功结束                           │
+│     → 返回 TASKS_INCOMPLETE：报错中止                          │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -226,25 +262,21 @@ scraper 通过以下参数在子 skills 间传递上下文：
 
 1. **[核心要求]** 必须完成澄清阶段后才能进入执行阶段
 2. **[核心要求]** 澄清阶段必须先执行模式选择（A 固定关键词 / B 发散模式）
-3. **[核心要求]** 执行阶段开始前必须检查登录状态：
-   - 调用 `python .claude/skills/xiaohongshu-scraper/scripts/login_xhs.py --check-only`
-   - 等待并解析返回结果
-   - 返回 `LOGIN_OK`：继续执行
-   - 返回 `NEED_LOGIN:<path>`：执行登录流程（显示二维码路径让用户扫码），成功后继续
-   - 返回 `LOGIN_TIMEOUT` 或 `LOGIN_FAILED`：报告错误并等待用户处理
-4. **[核心要求]** 模式 A 必须衍生关键词并获得用户确认；模式 B 必须收集参数并获得用户确认
-5. **[核心要求]** 模式 B 必须展示每轮配额预览（余数加到第一轮）
-6. **[核心要求]** 用户确认后必须立即创建搜索目录，路径格式为 `data/xiaohongshu/YYYYMMDD_HHmmSS_主题/`
-7. **[核心要求]** 目录时间戳必须使用当前系统时间，禁止使用示例或虚构时间
-8. **[核心要求]** 生成报告后必须将报告原文直接发送到用户对话框
+3. **[核心要求]** 模式 A 必须衍生关键词并获得用户确认；模式 B 必须收集参数并获得用户确认
+4. **[核心要求]** 模式 B 必须展示每轮配额预览（余数加到第一轮）
+5. **[核心要求]** 用户确认后必须立即创建搜索目录，路径格式为 `data/xiaohongshu/YYYYMMDD_HHmmSS_主题/`
+6. **[核心要求]** 目录时间戳必须使用当前系统时间，禁止使用示例或虚构时间
+7. **[核心要求]** 进入阶段二后必须立即创建 `{OUTPUT_DIR}/tasks.md`，包含 5 项未勾选任务
+8. **[核心要求]** 每完成一项任务必须立即更新 tasks.md，将 `[ ]` 改为 `[x]`
 9. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
-   - 步骤 2：检查登录状态 → 必须返回 `LOGIN_OK`
-   - 步骤 3：抓取数据 → 必须产出 `raw.json`
-   - 步骤 4：生成报告 → 必须阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `_index.md`
-   - 步骤 5：格式化报告 → 必须阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `_index.md`
-   - 步骤 6：发送报告 → 必须将最终报告发送到用户对话框
-
-   **每一步完成后必须验证产出文件存在，再进入下一步**
+   - 检查登录状态 → 返回 `LOGIN_OK` 后打勾
+   - 抓取数据 → 产出 `raw.json` 和 `id_url_map.json` 后打勾
+   - 生成报告 → 阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `_index.md` 后打勾
+   - 格式化报告 → 阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `_index.md` 后打勾
+   - 发送报告 → 将最终报告发送到用户对话框后打勾
+10. **[核心要求]** 阶段结束前必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证
+    - 返回 `TASKS_COMPLETE`：成功结束
+    - 返回 `TASKS_INCOMPLETE`：报错中止，禁止发送报告
 
 ---
 
