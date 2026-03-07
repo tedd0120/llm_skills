@@ -56,12 +56,21 @@ class XHSLogin:
             return False
 
     def _is_logged_in(self, page) -> bool:
-        page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
+        # 检测搜索页面而非 explore 页面，因为搜索页面有更严格的登录要求
+        page.goto("https://www.xiaohongshu.com/search_result?keyword=test", wait_until="domcontentloaded")
         try:
-            page.wait_for_selector(S.SEARCH_INPUT, timeout=8000)
+            # 等待页面加载
+            page.wait_for_timeout(2000)
+            # 检查是否有登录模态框或二维码
+            login_modal = page.locator(S.LOGIN_MODAL)
+            qr_code = page.locator(S.QR_CODE_IMAGE)
             login_btn = page.locator(f"text={S.LOGIN_BUTTON_TEXT}")
-            return not self._safe_visible(login_btn)
-        except PwTimeout:
+
+            # 如果出现任何登录元素，说明未登录
+            if self._safe_visible(login_modal) or self._safe_visible(qr_code) or self._safe_visible(login_btn):
+                return False
+            return True
+        except Exception:
             return False
 
     def _cleanup_qr(self):
