@@ -85,9 +85,9 @@ class XHSLogin:
     @staticmethod
     def _emit_need_login(check_only: bool, qr_path: str):
         if check_only:
-            print("NEED_LOGIN")
+            print("NEED_LOGIN", flush=True)
         else:
-            print(f"NEED_LOGIN:{qr_path}")
+            print(f"NEED_LOGIN:{qr_path}", flush=True)
 
     def run(self, check_only: bool, timeout: int) -> int:
         with sync_playwright() as pw:
@@ -103,7 +103,7 @@ class XHSLogin:
             try:
                 if self._is_logged_in(page):
                     ctx.storage_state(path=self.auth_state_path)
-                    print("LOGIN_OK")
+                    print("LOGIN_OK", flush=True)
                     return 0
 
                 if check_only:
@@ -121,20 +121,20 @@ class XHSLogin:
 
                 page.wait_for_selector(S.LOGIN_MODAL, state="hidden", timeout=timeout * 1000)
                 if not self._is_logged_in(page):
-                    print("LOGIN_FAILED")
+                    print("LOGIN_FAILED", flush=True)
                     return 1
 
                 ctx.storage_state(path=self.auth_state_path)
                 self._cleanup_qr()
-                print("LOGIN_SUCCESS")
+                print("LOGIN_SUCCESS", flush=True)
                 return 0
             except PwTimeout:
                 self._cleanup_qr()
-                print("LOGIN_TIMEOUT")
+                print("LOGIN_TIMEOUT", flush=True)
                 return 2
             except Exception:
                 self._cleanup_qr()
-                print("LOGIN_FAILED")
+                print("LOGIN_FAILED", flush=True)
                 return 1
             finally:
                 ctx.close()

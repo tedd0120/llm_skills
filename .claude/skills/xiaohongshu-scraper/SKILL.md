@@ -4,7 +4,7 @@ description: 小红书内容抓取与分析（一站式入口）
 license: MIT
 metadata:
   author: llm-skills
-  version: "4.0"
+  version: "4.1"
 ---
 
 # 小红书内容抓取 Skill
@@ -194,6 +194,15 @@ metadata:
 - 阶段二结束前，必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证全部完成
 - 验证失败必须报错中止，禁止发送未完成的报告
 
+#### 登录轮询配置
+
+`确保登录`步骤使用以下配置：
+
+- `LOGIN_POLL_INTERVAL_SEC`：登录输出轮询间隔（秒）
+  - 默认值：`2`
+  - 建议范围：`1-10`
+  - 若配置值非法（非数字、<=0 或超出建议范围），**必须**回退到默认值 `2`，并在日志中说明回退原因
+
 #### 完整流程
 
 ```
@@ -210,11 +219,12 @@ metadata:
 │  2. 创建任务清单                                               │
 │     → 写入 {OUTPUT_DIR}/tasks.md（5 项未勾选任务）             │
 │                                                             │
-│  3. 确保登录                                                  │
-│     → 调用 scripts/login_xhs.py                              │
-│     → 返回 LOGIN_OK：说明已登录，打勾 ✓ 继续执行                │
-│     → 返回 NEED_LOGIN:<path>：显示二维码等待用户扫码             │
-│     → 返回 LOGIN_SUCCESS：说明本次会话内登录成功，打勾 ✓ 继续执行 │
+│  3. 确保登录（后台轮询）                                        │
+│     → 后台启动 scripts/login_xhs.py（禁止阻塞等待）             │
+│     → 每 LOGIN_POLL_INTERVAL_SEC 秒轮询新增输出                │
+│     → NEED_LOGIN:<abs_path>：立即提醒用户扫码并展示绝对路径      │
+│     → LOGIN_OK/LOGIN_SUCCESS：打勾 ✓ 继续执行                   │
+│     → LOGIN_TIMEOUT/LOGIN_FAILED：报错中止                      │
 │                                                             │
 │  4. 抓取数据 → xiaohongshu-fetch                             │
 │     → 固定模式：单次调用 → raw.json                            │
@@ -255,6 +265,21 @@ scraper 通过以下参数在子 skills 间传递上下文：
 | `divergence_params` | object | 发散模式参数配置 | fetch |
 | `hyperlinks` | boolean | 是否启用超链接功能 | fetch, summarize, formatter |
 
+#### 登录步骤执行模板（后台轮询）
+
+```text
+1) 读取 LOGIN_POLL_INTERVAL_SEC（默认 2；非法值回退到 2）
+2) 后台启动：python .claude/skills/xiaohongshu-scraper/scripts/login_xhs.py
+3) 循环轮询新增输出（间隔 = LOGIN_POLL_INTERVAL_SEC）：
+   - 出现 NEED_LOGIN:<abs_path>：
+     立即向用户发送：
+     "请扫码登录小红书。二维码文件：<abs_path>"
+   - 出现 LOGIN_OK 或 LOGIN_SUCCESS：
+     标记“确保登录”为完成，退出轮询
+   - 出现 LOGIN_TIMEOUT 或 LOGIN_FAILED：
+     报错并中止执行阶段
+```
+
 ---
 
 ## 核心要求（编排层）
@@ -269,13 +294,19 @@ scraper 通过以下参数在子 skills 间传递上下文：
 6. **[核心要求]** 目录时间戳必须使用当前系统时间，禁止使用示例或虚构时间
 7. **[核心要求]** 进入阶段二后必须立即创建 `{OUTPUT_DIR}/tasks.md`，包含 5 项未勾选任务
 8. **[核心要求]** 每完成一项任务必须立即更新 tasks.md，将 `[ ]` 改为 `[x]`
-9. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
-   - 确保登录 → 调用 `scripts/login_xhs.py`，返回 `LOGIN_OK` 或 `LOGIN_SUCCESS` 后打勾
+9. **[核心要求]** 确保登录步骤必须使用后台轮询模式：
+   - 必须后台启动 `scripts/login_xhs.py`，禁止阻塞等待到脚本结束后再处理输出
+   - 必须按 `LOGIN_POLL_INTERVAL_SEC` 间隔轮询新增输出（默认 2 秒；非法值回退到 2 秒）
+   - 检测到 `NEED_LOGIN:<abs_path>` 时，必须立即提示用户扫码并展示二维码绝对路径
+   - 检测到 `LOGIN_OK` 或 `LOGIN_SUCCESS` 后，才能打勾并进入下一步
+   - 检测到 `LOGIN_TIMEOUT` 或 `LOGIN_FAILED` 时，必须报错中止，禁止继续抓取
+10. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
+   - 确保登录 → 完成后台轮询收敛后打勾
    - 抓取数据 → 产出 `raw.json` 和 `id_url_map.json` 后打勾
    - 生成报告 → 阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `_index.md` 后打勾
    - 格式化报告 → 阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `_index.md` 后打勾
    - 发送报告 → 将最终报告发送到用户对话框后打勾
-10. **[核心要求]** 阶段结束前必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证
+11. **[核心要求]** 阶段结束前必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证
     - 返回 `TASKS_COMPLETE`：成功结束
     - 返回 `TASKS_INCOMPLETE`：报错中止，禁止发送报告
 
