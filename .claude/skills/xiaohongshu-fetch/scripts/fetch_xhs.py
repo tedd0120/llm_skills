@@ -14,9 +14,8 @@ import argparse
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 确保能导入同目录下的 selectors
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from selectors import XHSSelectors as S
+# 导入同目录下的选择器
+from xhs_selectors import XHSSelectors as S
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PwTimeout
 
@@ -33,21 +32,23 @@ load_dotenv()
 class XHSScraper:
     def __init__(
         self,
-        headless: bool = None,
         max_posts: int = 10,
         search_strategy: list = None,
         seen_ids_path: str = "",
+        hyperlinks: bool = False,
     ):
-        self.headless = headless
-        if self.headless is None:
-            if sys.platform != 'win32' and not os.environ.get('DISPLAY'):
-                self.headless = True
-            else:
-                self.headless = False
+        # 强制有头模式：在无 DISPLAY 时报错退出
+        if sys.platform != 'win32' and not os.environ.get('DISPLAY'):
+            print("[✗] 检测到无 DISPLAY 环境变量", file=sys.stderr, flush=True)
+            print("    请先启动虚拟显示器:", file=sys.stderr, flush=True)
+            print("    Xvfb :99 -screen 0 1920x1080x24 &", file=sys.stderr, flush=True)
+            print("    export DISPLAY=:99", file=sys.stderr, flush=True)
+            sys.exit(1)
 
         self.max_posts = min(max_posts, 100)  # 硬上限 100
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
+        self.hyperlinks = hyperlinks
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
             '.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
@@ -93,8 +94,8 @@ class XHSScraper:
     # ------------------------------------------------------------------
     def run(self, keywords: list, output_file: str = ""):
         with sync_playwright() as pw:
-            launch_kw = {"headless": self.headless}
-            if sys.platform == 'win32' and not self.headless:
+            launch_kw = {"headless": False}
+            if sys.platform == 'win32':
                 launch_kw["channel"] = "msedge"
 
             browser = pw.chromium.launch(**launch_kw)
@@ -143,6 +144,24 @@ class XHSScraper:
                 Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                 Path(output_file).write_text(out, encoding="utf-8")
                 print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
+
+                # 生成 id_url_map.json（超链接启用时）
+                if self.hyperlinks and output_file:
+                    id_url_map = {}
+                    for post in all_posts:
+                        post_id = post.get("post_id", "")
+                        url = post.get("url", "")
+                        if post_id and url:
+                            id_url_map[post_id] = url
+
+                    if id_url_map:
+                        output_dir = Path(output_file).parent
+                        map_file = output_dir / "id_url_map.json"
+                        map_file.write_text(
+                            json.dumps(id_url_map, ensure_ascii=False, indent=2),
+                            encoding="utf-8"
+                        )
+                        print(f"[✓] ID-URL 映射 → {map_file}", flush=True)
             else:
                 print("\n" + out)
 
@@ -261,12 +280,15 @@ class XHSScraper:
         # 评论
         comments = self._extract_comments(page)
 
-        # 从 url 提取 note_id
-        note_id = url.split("/")[-1].split("?")[0]
+        # 从 URL 中提取帖子 ID
+        # URL 格式: https://www.xiaohongshu.com/explore/{note_id} 或 /discovery/item/{note_id}
+        post_id = ""
+        if url:
+            # 去除查询参数和尾部斜杠
+            clean_url = url.rstrip("/").split("?")[0]
+            post_id = clean_url.split("/")[-1] if clean_url else ""
 
-        return {
-            "note_id":      note_id,
-            "url":          url,
+        result = {
             "title":        title,
             "content":      content,
             "author":       author,
@@ -276,6 +298,13 @@ class XHSScraper:
             "comments_count": chat,
             "comments":     comments,
         }
+
+        # 超链接启用时包含 post_id 和 url
+        if self.hyperlinks:
+            result["post_id"] = post_id
+            result["url"] = url
+
+        return result
 
     def _extract_comments(self, page: Page) -> list[str]:
         comments = []
@@ -312,12 +341,12 @@ if __name__ == "__main__":
                         help="最多抓取帖子数 (上限 100)")
     parser.add_argument("--output", default="",
                         help="JSON 输出文件路径")
-    parser.add_argument("--headless", action="store_true",
-                        help="强制无头模式")
     parser.add_argument("--search-strategy", default="",
                         help="搜索策略 JSON 字符串，包含 keyword、posts_count、intent")
     parser.add_argument("--seen-ids", default="",
                         help="跨调用去重文件路径（每行一个 note_id）")
+    parser.add_argument("--hyperlinks", action="store_true",
+                        help="启用超链接功能，生成 id_url_map.json")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
@@ -335,9 +364,9 @@ if __name__ == "__main__":
             sys.exit(1)
 
     scraper = XHSScraper(
-        headless=True if args.headless else None,
         max_posts=args.max_posts,
         search_strategy=search_strategy,
         seen_ids_path=args.seen_ids,
+        hyperlinks=args.hyperlinks,
     )
     scraper.run(keywords=kws, output_file=args.output)

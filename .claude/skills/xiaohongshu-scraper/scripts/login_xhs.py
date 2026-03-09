@@ -14,8 +14,7 @@ from playwright.sync_api import TimeoutError as PwTimeout
 from playwright.sync_api import sync_playwright
 
 # 导入同目录下的选择器
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from selectors import XHSSelectors as S
+from xhs_selectors import XHSSelectors as S
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -25,13 +24,14 @@ load_dotenv()
 
 
 class XHSLogin:
-    def __init__(self, headless: bool = None):
-        self.headless = headless
-        if self.headless is None:
-            if sys.platform != "win32" and not os.environ.get("DISPLAY"):
-                self.headless = True
-            else:
-                self.headless = False
+    def __init__(self):
+        # 强制有头模式：在无 DISPLAY 时报错退出
+        if sys.platform != "win32" and not os.environ.get("DISPLAY"):
+            print("[✗] 检测到无 DISPLAY 环境变量", file=sys.stderr, flush=True)
+            print("    请先启动虚拟显示器:", file=sys.stderr, flush=True)
+            print("    Xvfb :99 -screen 0 1920x1080x24 &", file=sys.stderr, flush=True)
+            print("    export DISPLAY=:99", file=sys.stderr, flush=True)
+            sys.exit(1)
 
         self.auth_state_path = os.environ.get(
             "XHS_AUTH_STATE",
@@ -79,8 +79,8 @@ class XHSLogin:
 
     def run(self, check_only: bool, timeout: int) -> int:
         with sync_playwright() as pw:
-            launch_kw = {"headless": self.headless}
-            if sys.platform == "win32" and not self.headless:
+            launch_kw = {"headless": False}
+            if sys.platform == "win32":
                 launch_kw["channel"] = "msedge"
 
             browser = pw.chromium.launch(**launch_kw)
@@ -131,10 +131,9 @@ def main():
     parser = argparse.ArgumentParser(description="小红书登录工具")
     parser.add_argument("--check-only", action="store_true", help="仅检查 Cookie 是否有效")
     parser.add_argument("--timeout", type=int, default=120, help="扫码等待超时秒数，默认 120")
-    parser.add_argument("--headless", action="store_true", help="强制无头模式")
     args = parser.parse_args()
 
-    login = XHSLogin(headless=True if args.headless else None)
+    login = XHSLogin()
     code = login.run(check_only=args.check_only, timeout=args.timeout)
     sys.exit(code)
 

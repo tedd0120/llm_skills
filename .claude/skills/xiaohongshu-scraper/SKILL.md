@@ -300,9 +300,9 @@ pip install -r .claude/skills/xiaohongshu-scraper/scripts/requirements.txt
 
 脚本会优先使用系统 Edge (`channel="msedge"`) 以减少风控特征。
 
-### Linux 无屏幕环境配置（Xvfb 虚拟显示器）
+### Linux 无屏幕环境配置（Xvfb 虚拟显示器）⚠️ 必须
 
-在 Linux 服务器（无物理显示器）上运行时，[标准操作] 应当使用 Xvfb 创建虚拟屏幕：
+**[核心要求]** 在 Linux/WSL 服务器（无物理显示器）上运行时，必须使用 Xvfb 创建虚拟屏幕。脚本强制使用有头模式以确保登录成功率，无 `DISPLAY` 环境变量时将报错退出。
 
 ```bash
 # 安装 Xvfb 和依赖
@@ -313,7 +313,7 @@ Xvfb :99 -screen 0 1920x1080x24 &
 export DISPLAY=:99
 ```
 
-> **[灵活选项]**：如无法安装 Xvfb，可降级使用 `--headless` 参数（风险提示：风控检测概率更高）。
+> ⚠️ **无虚拟显示器将无法运行**：小红书登录在有头模式下成功率更高，headless 模式已被移除。
 
 ---
 
@@ -323,5 +323,5 @@ export DISPLAY=:99
 |-----|------|---------|
 | 检测到未登录 | Cookie 过期或未登录 | 执行 `scripts/login_xhs.py` 完成扫码登录 |
 | 风控封禁 | 小红书检测到自动化 | 脚本已内置延时，**禁止取消延时** |
-| 元素选择器失效 | 小红书页面改版 | 检查 `scripts/selectors.py` 并更新选择器 |
+| 元素选择器失效 | 小红书页面改版 | 检查 `scripts/xhs_selectors.py` 并更新选择器 |
 | 二维码过期或超时 | 登录等待时间过长 | 使用 `--timeout N` 调整超时时间 |
