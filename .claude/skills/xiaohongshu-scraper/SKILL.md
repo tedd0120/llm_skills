@@ -12,7 +12,7 @@ metadata:
 一站式小红书内容抓取与分析入口。作为编排层，协调各个子 skills 完成从数据抓取到报告生成的完整流程。
 
 **内部架构**：
-- `scripts/login_xhs.py` - 检查登录状态并处理扫码登录
+- `scripts/login_xhs.py` - 单次调用内检查登录状态，并在需要时处理扫码登录
 - `xiaohongshu-fetch` - 执行浏览器自动化抓取，输出 raw.json（详见其 SKILL.md）
 - `xiaohongshu-summarize` - 分析数据并生成结构化报告（描述性 skill）
 - `xiaohongshu-formatter` - 美化报告格式，增强 emoji（描述性 skill）
@@ -173,7 +173,7 @@ metadata:
 
 此阶段编排各个子 skills 完成数据抓取和报告生成。
 
-**编排层职责**：检查登录 → 抓取数据 → 生成报告 → 格式化报告 → 发送报告
+**编排层职责**：确保登录 → 抓取数据 → 生成报告 → 格式化报告 → 发送报告
 
 #### 执行任务清单
 
@@ -182,7 +182,7 @@ metadata:
 ```markdown
 ## 执行任务清单
 
-- [ ] 检查登录状态
+- [ ] 确保登录
 - [ ] 抓取数据
 - [ ] 生成报告
 - [ ] 格式化报告
@@ -210,10 +210,11 @@ metadata:
 │  2. 创建任务清单                                               │
 │     → 写入 {OUTPUT_DIR}/tasks.md（5 项未勾选任务）             │
 │                                                             │
-│  3. 检查登录                                                  │
-│     → 调用 scripts/login_xhs.py --check-only                │
-│     → 返回 LOGIN_OK：打勾 ✓ 继续执行                          │
-│     → 返回其他状态：执行登录流程（显示二维码让用户扫码）          │
+│  3. 确保登录                                                  │
+│     → 调用 scripts/login_xhs.py                              │
+│     → 返回 LOGIN_OK：说明已登录，打勾 ✓ 继续执行                │
+│     → 返回 NEED_LOGIN:<path>：显示二维码等待用户扫码             │
+│     → 返回 LOGIN_SUCCESS：说明本次会话内登录成功，打勾 ✓ 继续执行 │
 │                                                             │
 │  4. 抓取数据 → xiaohongshu-fetch                             │
 │     → 固定模式：单次调用 → raw.json                            │
@@ -269,7 +270,7 @@ scraper 通过以下参数在子 skills 间传递上下文：
 7. **[核心要求]** 进入阶段二后必须立即创建 `{OUTPUT_DIR}/tasks.md`，包含 5 项未勾选任务
 8. **[核心要求]** 每完成一项任务必须立即更新 tasks.md，将 `[ ]` 改为 `[x]`
 9. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
-   - 检查登录状态 → 返回 `LOGIN_OK` 后打勾
+   - 确保登录 → 调用 `scripts/login_xhs.py`，返回 `LOGIN_OK` 或 `LOGIN_SUCCESS` 后打勾
    - 抓取数据 → 产出 `raw.json` 和 `id_url_map.json` 后打勾
    - 生成报告 → 阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `_index.md` 后打勾
    - 格式化报告 → 阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `_index.md` 后打勾
@@ -321,7 +322,7 @@ export DISPLAY=:99
 
 | 问题 | 原因 | 处理方式 |
 |-----|------|---------|
-| 检测到未登录 | Cookie 过期或未登录 | 执行 `scripts/login_xhs.py` 完成扫码登录 |
+| 检测到未登录 | Cookie 过期或未登录 | 执行 `scripts/login_xhs.py`，在当前会话中完成扫码登录 |
 | 风控封禁 | 小红书检测到自动化 | 脚本已内置延时，**禁止取消延时** |
 | 元素选择器失效 | 小红书页面改版 | 检查 `scripts/xhs_selectors.py` 并更新选择器 |
 | 二维码过期或超时 | 登录等待时间过长 | 使用 `--timeout N` 调整超时时间 |

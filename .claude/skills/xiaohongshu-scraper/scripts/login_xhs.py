@@ -1,6 +1,6 @@
 """
 小红书登录脚本
-独立负责登录状态检查、二维码登录和 Cookie 持久化。
+独立负责登录状态检查、按需二维码登录和 Cookie 持久化。
 """
 
 import argparse
@@ -69,7 +69,10 @@ class XHSLogin:
             # 如果出现任何登录元素，说明未登录
             if self._safe_visible(login_modal) or self._safe_visible(qr_code) or self._safe_visible(login_btn):
                 return False
-            return True
+
+            # 必须验证搜索结果卡片存在，才算登录成功
+            post_cards = page.locator(S.POST_CARD)
+            return post_cards.count() > 0
         except Exception:
             return False
 
@@ -77,11 +80,19 @@ class XHSLogin:
         if os.path.exists(self.qr_path):
             os.remove(self.qr_path)
 
+    @staticmethod
+    def _emit_need_login(check_only: bool, qr_path: str):
+        if check_only:
+            print("NEED_LOGIN")
+        else:
+            print(f"NEED_LOGIN:{qr_path}")
+
     def run(self, check_only: bool, timeout: int) -> int:
         with sync_playwright() as pw:
             launch_kw = {"headless": False}
             if sys.platform == "win32":
                 launch_kw["channel"] = "msedge"
+                launch_kw["args"] = ["--start-minimized"]
 
             browser = pw.chromium.launch(**launch_kw)
             ctx = self._build_context(browser)
@@ -93,7 +104,7 @@ class XHSLogin:
                     return 0
 
                 if check_only:
-                    print(f"NEED_LOGIN:{self.qr_path}")
+                    self._emit_need_login(check_only=True, qr_path=self.qr_path)
                     return 1
 
                 login_btn = page.locator(f"text={S.LOGIN_BUTTON_TEXT}")
@@ -103,7 +114,7 @@ class XHSLogin:
                 page.wait_for_selector(S.QR_CODE_IMAGE, state="visible", timeout=15000)
                 modal = page.locator(S.LOGIN_MODAL)
                 modal.screenshot(path=self.qr_path)
-                print(f"NEED_LOGIN:{self.qr_path}")
+                self._emit_need_login(check_only=False, qr_path=self.qr_path)
 
                 page.wait_for_selector(S.LOGIN_MODAL, state="hidden", timeout=timeout * 1000)
                 if not self._is_logged_in(page):

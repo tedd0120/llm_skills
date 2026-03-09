@@ -97,6 +97,7 @@ class XHSScraper:
             launch_kw = {"headless": False}
             if sys.platform == 'win32':
                 launch_kw["channel"] = "msedge"
+                launch_kw["args"] = ["--start-minimized"]
 
             browser = pw.chromium.launch(**launch_kw)
 
