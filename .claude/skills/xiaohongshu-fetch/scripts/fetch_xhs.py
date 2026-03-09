@@ -49,11 +49,12 @@ class XHSScraper:
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
         self.hyperlinks = hyperlinks
+        SCRIPT_DIR = Path(__file__).parent.resolve()
+        SKILLS_DIR = SCRIPT_DIR.parent.parent  # scripts -> xiaohongshu-fetch -> skills
         self.auth_state_path = os.environ.get(
             'XHS_AUTH_STATE',
-            '.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json'
+            str(SKILLS_DIR / "xiaohongshu-scraper" / "scripts" / "xhs_auth.json"),
         )
-        Path(self.auth_state_path).parent.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
     # helpers

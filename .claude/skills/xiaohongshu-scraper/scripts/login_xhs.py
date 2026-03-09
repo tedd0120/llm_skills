@@ -33,10 +33,12 @@ class XHSLogin:
             print("    export DISPLAY=:99", file=sys.stderr, flush=True)
             sys.exit(1)
 
+        SCRIPT_DIR = Path(__file__).parent.resolve()
         self.auth_state_path = os.environ.get(
             "XHS_AUTH_STATE",
-            ".claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json",
+            str(SCRIPT_DIR / "xhs_auth.json"),
         )
+        # 确保 auth 文件所在目录存在
         Path(self.auth_state_path).parent.mkdir(parents=True, exist_ok=True)
         self.qr_path = str((Path.cwd() / "xhs_qr_login.png").resolve())
 
@@ -100,6 +102,7 @@ class XHSLogin:
 
             try:
                 if self._is_logged_in(page):
+                    ctx.storage_state(path=self.auth_state_path)
                     print("LOGIN_OK")
                     return 0
 

@@ -23,7 +23,9 @@
       "Bash(sqlite3:*)",
       "Bash(openspec-cn archive:*)",
       "Bash(printf y\\\\nY\\\\n:*)",
-      "Bash(do:*)"
+      "Bash(do:*)",
+      "Bash(start:*)",
+      "Bash(wc:*)"
     ]
   }
 }
