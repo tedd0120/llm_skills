@@ -171,20 +171,39 @@ class XHSScraper:
             browser.close()
 
     def _is_not_logged_in(self, page: Page) -> bool:
+        """
+        检测是否处于未登录状态（需要强制登录才能继续）。
+
+        注意：小红书页面经常会有"扫码关注作者"、"扫码下载APP"等二维码，
+        以及"登录后关注"等按钮，这些并不意味着用户未登录。
+        只有出现遮罩层 + 登录弹窗的组合，才是真正的强制登录状态。
+        """
+        # 1. URL 检测：如果跳转到登录页，说明需要登录
         if "login" in page.url.lower():
             return True
+
         try:
+            # 2. 检测强制登录弹窗：遮罩层 + 登录弹窗同时出现
+            # 这才是真正的"未登录需要登录"状态
             login_modal = page.locator(S.LOGIN_MODAL)
-            if login_modal.count() > 0 and login_modal.first.is_visible():
+            overlay = page.locator(S.LOGIN_OVERLAY)
+
+            modal_visible = login_modal.count() > 0 and login_modal.first.is_visible()
+            overlay_visible = overlay.count() > 0 and overlay.first.is_visible()
+
+            if modal_visible and overlay_visible:
                 return True
-            qr_code = page.locator(S.QR_CODE_IMAGE)
-            if qr_code.count() > 0 and qr_code.first.is_visible():
-                return True
-            login_btn = page.locator(f"text={S.LOGIN_BUTTON_TEXT}")
-            if login_btn.count() > 0 and login_btn.first.is_visible():
-                return True
+
+            # 3. 备用检测：登录弹窗内有明显的"登录"标题且可见
+            # 避免误判普通的登录引导按钮
+            login_title = page.locator(S.LOGIN_MODAL_TITLE)
+            if modal_visible and login_title.count() > 0:
+                if login_title.first.is_visible():
+                    return True
+
         except Exception:
             pass
+
         return False
 
     @staticmethod

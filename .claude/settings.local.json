@@ -25,7 +25,8 @@
       "Bash(printf y\\\\nY\\\\n:*)",
       "Bash(do:*)",
       "Bash(start:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(python -c \"import json; data=json.load\\(open\\('data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/raw_round_1.json','r',encoding='utf-8'\\)\\); ids=[p['note_id'] for p in data['posts']]; print\\('\\\\n'.join\\(ids\\)\\)\" > \"data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/seen_ids.txt\")"
     ]
   }
 }

@@ -8,7 +8,9 @@
 class XHSSelectors:
     # --- 登录相关 ---
     LOGIN_MODAL = ".login-container"
-    QR_CODE_IMAGE = ".qrcode-img"
+    LOGIN_OVERLAY = ".login-vdiceas"  # 登录弹窗遮罩层
+    LOGIN_MODAL_TITLE = ".login-container .title"  # 登录弹窗标题
+    QR_CODE_IMAGE = ".qrcode-img"  # 注意：页面上的二维码不一定意味着未登录
     LOGIN_SUCCESS_ELEMENT = ".user .name"  # 登录成功后会出现用户名
     LOGIN_BUTTON_TEXT = "登录"
     
