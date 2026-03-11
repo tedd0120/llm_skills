@@ -26,7 +26,8 @@
       "Bash(do:*)",
       "Bash(start:*)",
       "Bash(wc:*)",
-      "Bash(python -c \"import json; data=json.load\\(open\\('data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/raw_round_1.json','r',encoding='utf-8'\\)\\); ids=[p['note_id'] for p in data['posts']]; print\\('\\\\n'.join\\(ids\\)\\)\" > \"data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/seen_ids.txt\")"
+      "Bash(python -c \"import json; data=json.load\\(open\\('data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/raw_round_1.json','r',encoding='utf-8'\\)\\); ids=[p['note_id'] for p in data['posts']]; print\\('\\\\n'.join\\(ids\\)\\)\" > \"data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/seen_ids.txt\")",
+      "Bash(cd P:/git_repos/llm_skills && mkdir -p openspec/changes/archive && mv openspec/changes/add-xhs-login-qr-reminder openspec/changes/archive/2026-03-11-add-xhs-login-qr-reminder && mv openspec/changes/fix-xhs-auth-path openspec/changes/archive/2026-03-11-fix-xhs-auth-path && echo \"Archive completed\")"
     ]
   }
 }
