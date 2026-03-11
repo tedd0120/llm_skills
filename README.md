@@ -24,13 +24,16 @@
 
 ### 🔍 社交媒体 (Social Media)
 
-*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 一站式小红书内容抓取与分析入口。支持两种搜索模式：**固定关键词模式**（用户确认关键词后一次性搜索）和 **发散模式**（AI 自动多轮搜索，每轮动态决策下一关键词）。内置随机延时反风控机制，支持 Cookie 持久化、跨轮去重、超链接格式输出。自动生成结构化分析报告，包含品牌声量、评论区共识、场景化决策建议等板块。
+*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper-codex`]: 小红书 codex 新架构推荐入口。由单一入口 skill 负责澄清与进度展示，并通过内部 orchestrator 串联抓取、报告生成与最终校验。支持固定关键词模式与发散模式，保留旧版技能作为兼容参考。
 
-    **模块化架构**：
-    - [`xiaohongshu-login`] - 登录管理与 Cookie 校验
-    - [`xiaohongshu-fetch`] - 数据抓取（内部组件）
-    - [`xiaohongshu-summarize`] - AI 报告生成
-    - [`xiaohongshu-formatter`] - 报告格式美化
+    **codex 架构**：
+    - [`xiaohongshu-scraper-codex`] - 推荐入口（澄清 + 进度 + orchestrator 调度）
+    - [`xiaohongshu-fetch-codex`] - 数据抓取引擎（内部组件）
+    - [`xiaohongshu-report-codex`] - 统一报告流水线（内部组件）
+    - [`xiaohongshu-core-codex`] - 共享基础层（内部组件）
+
+    **旧版保留**：
+    - [`xiaohongshu-scraper`]、[`xiaohongshu-fetch`]、[`xiaohongshu-summarize`]、[`xiaohongshu-formatter`] 继续保留，用于兼容参考与历史行为对照。
 
 ## 🚀 使用指南
 
