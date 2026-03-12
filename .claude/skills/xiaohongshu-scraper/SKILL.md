@@ -234,7 +234,7 @@ metadata:
 │                                                             │
 │  5. 生成报告 → xiaohongshu-summarize                          │
 │     → 阅读 SKILL.md 了解报告模板                               │
-│     → 读取 raw.json，生成 _index.md                           │
+│     → 读取 raw.json，生成 {主题}.md                           │
 │     → 打勾 ✓                                                 │
 │                                                             │
 │  6. 格式化报告 → xiaohongshu-formatter                        │
@@ -303,8 +303,8 @@ scraper 通过以下参数在子 skills 间传递上下文：
 10. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
    - 确保登录 → 完成后台轮询收敛后打勾
    - 抓取数据 → 产出 `raw.json` 和 `id_url_map.json` 后打勾
-   - 生成报告 → 阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `_index.md` 后打勾
-   - 格式化报告 → 阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `_index.md` 后打勾
+   - 生成报告 → 阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `{主题}.md` 后打勾
+   - 格式化报告 → 阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `{主题}.md` 后打勾
    - 发送报告 → 将最终报告发送到用户对话框后打勾
 11. **[核心要求]** 阶段结束前必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证
     - 返回 `TASKS_COMPLETE`：成功结束

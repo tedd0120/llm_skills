@@ -1,18 +1,41 @@
 # 小红书报告格式化 Skill
 
-对现有 `_index.md` 报告进行后处理，增强 emoji 使用，提升报告的趣味性和可读性。
+对现有 `{主题}.md` 报告进行后处理，增强 emoji 使用，提升报告的趣味性和可读性。
 
 ---
 
 ## 🎯 使用场景
 
-在报告草稿已经整理为 `_index.md` 后，可调用此 skill 进行格式美化：
+在报告草稿已经整理为 `{主题}.md` 后，可调用此 skill 进行格式美化：
 
 ```
-1. 已有 _index.md
-2. 调用 xiaohongshu-formatter
-3. 输出格式增强后的 _index.md
+1. 解析报告文件名（从 OUTPUT_DIR 路径解析主题）
+2. 已有 {主题}.md
+3. 调用 xiaohongshu-formatter
+4. 输出格式增强后的 {主题}.md
 ```
+
+### 报告文件名解析
+
+**从 OUTPUT_DIR 路径解析主题名称**：
+
+```
+OUTPUT_DIR 格式: data/xiaohongshu/YYYYMMDD_HHmmSS_主题/
+示例: data/xiaohongshu/20260312_150611_北京出发国外目的地推荐/
+
+解析规则:
+1. 取目录名最后一段: "20260312_150611_北京出发国外目的地推荐"
+2. 按下划线分割，取第三段（索引 2）作为主题: "北京出发国外目的地推荐"
+3. 报告文件名: {主题}.md
+
+代码示例:
+  import os
+  dir_name = os.path.basename(output_dir.rstrip("/"))
+  theme = dir_name.split("_", 2)[2] if "_" in dir_name else dir_name
+  report_file = f"{theme}.md"
+```
+
+**fallback**：如果解析失败，使用默认文件名 `_index.md`。
 
 ---
 
@@ -73,7 +96,8 @@
 ## 🛠️ 执行流程
 
 1. **读取现有报告**
-   - 定位到搜索目录下的 `_index.md`
+   - 从 OUTPUT_DIR 解析主题名称（见上方说明）
+   - 定位到搜索目录下的 `{主题}.md`
    - 读取全部内容
    - 检查是否存在 `id_url_map.json` 文件
 
@@ -94,7 +118,7 @@
    - 保持原有内容和结构不变
 
 4. **覆盖原文件**
-   - 将格式化后的内容写回 `_index.md`
+   - 将格式化后的内容写回 `{主题}.md`
    - 或者先输出到终端供用户预览
 
 ---

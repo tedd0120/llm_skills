@@ -94,7 +94,7 @@ class XHSLogin:
             launch_kw = {"headless": False}
             if sys.platform == "win32":
                 launch_kw["channel"] = "msedge"
-                launch_kw["args"] = ["--start-minimized"]
+                launch_kw["args"] = ["--window-position=-2400,-2400"]
 
             browser = pw.chromium.launch(**launch_kw)
             ctx = self._build_context(browser)
