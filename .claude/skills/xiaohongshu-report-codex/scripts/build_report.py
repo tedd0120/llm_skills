@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -12,7 +11,7 @@ CORE_DIR = Path(__file__).resolve().parents[2] / "xiaohongshu-core-codex" / "scr
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 
-from schema import mark_task_complete
+from schema import build_explore_url, build_post_lookup, infer_topic_from_output_dir, mark_task_complete, read_json, require_text_file, resolve_draft_path
 
 TOOL_VERSION = "xiaohongshu-scraper-codex v1.0"
 DISCLAIMER = (
@@ -49,47 +48,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def infer_topic(output_dir: Path) -> str:
-    name = output_dir.name
-    parts = name.split("_", 2)
-    if len(parts) == 3:
-        return parts[2].replace("_", " ")
-    return name.replace("_", " ")
+def infer_topic(output_dir: Path, raw: dict) -> str:
+    return str(raw.get("topic") or "").strip() or infer_topic_from_output_dir(output_dir)
 
 
 def format_time(search_time: str) -> str:
     return (search_time or "")[:16]
 
 
-def build_reference_url(post: dict, id_url_map: dict[str, str]) -> str | None:
+def build_reference_url(post: dict) -> str | None:
     post_id = (post.get("post_id") or "").strip()
     if not post_id:
         return None
-    if post_id in id_url_map:
-        return f"https://www.xiaohongshu.com/explore/{post_id}"
-    if id_url_map:
-        return f"https://www.xiaohongshu.com/explore/{post_id}"
-    return None
-
-
-def resolve_draft_path(output_dir: Path, draft_arg: str) -> Path:
-    draft_path = Path(draft_arg)
-    if draft_path.is_absolute():
-        return draft_path
-    return output_dir / draft_path
-
-
-def require_text_file(path: Path, label: str) -> str:
-    if not path.exists():
-        raise FileNotFoundError(f"缺少 {label}: {path}")
-    content = path.read_text(encoding="utf-8")
-    if not content.strip():
-        raise ValueError(f"{label} 为空: {path}")
-    return content
+    return build_explore_url(post_id)
 
 
 def validate_draft(draft_text: str, draft_path: Path) -> None:
@@ -97,29 +68,24 @@ def validate_draft(draft_text: str, draft_path: Path) -> None:
         raise ValueError(f"草稿格式不合法，缺少“搜索概览”章节: {draft_path}")
 
 
-def build_post_lookup(raw: dict) -> dict[str, dict]:
-    posts = raw.get("posts") or []
-    return {str(post.get("post_id") or "").strip(): post for post in posts if str(post.get("post_id") or "").strip()}
-
-
-def resolve_reference_url(post_id: str, posts_by_id: dict[str, dict], id_url_map: dict[str, str]) -> str | None:
+def resolve_reference_url(post_id: str, posts_by_id: dict[str, dict]) -> str | None:
     post_id = post_id.strip()
     post = posts_by_id.get(post_id, {"post_id": post_id})
-    return build_reference_url(post, id_url_map)
+    return build_reference_url(post)
 
 
-def render_reference_links(text: str, posts_by_id: dict[str, dict], id_url_map: dict[str, str]) -> str:
+def render_reference_links(text: str, posts_by_id: dict[str, dict]) -> str:
     def replace_link(match: re.Match[str]) -> str:
         label = match.group(1)
         post_id = match.group(2)
-        url = resolve_reference_url(post_id, posts_by_id, id_url_map)
+        url = resolve_reference_url(post_id, posts_by_id)
         if url:
             return f"[{label}]({url})"
         return label
 
     def replace_url(match: re.Match[str]) -> str:
         post_id = match.group(1)
-        url = resolve_reference_url(post_id, posts_by_id, id_url_map)
+        url = resolve_reference_url(post_id, posts_by_id)
         if url:
             return f"({url})"
         return ""
@@ -216,13 +182,13 @@ def build_data_source_section(raw: dict) -> str:
     )
 
 
-def finalize_report(draft_text: str, raw: dict, output_dir: Path, id_url_map: dict[str, str]) -> str:
-    topic = infer_topic(output_dir)
-    posts_by_id = build_post_lookup(raw)
+def finalize_report(draft_text: str, raw: dict, output_dir: Path) -> str:
+    topic = infer_topic(output_dir, raw)
+    posts_by_id = build_post_lookup(raw.get("posts") or [])
     text = strip_data_source_section(draft_text)
     text = normalize_headings(text, topic)
     text = ensure_title(text, topic)
-    text = render_reference_links(text, posts_by_id, id_url_map)
+    text = render_reference_links(text, posts_by_id)
     text = cleanup_comment_prefixes(text)
     text = ensure_major_section_dividers(text)
     text = f"{text}\n\n---\n\n{build_data_source_section(raw)}"
@@ -241,13 +207,11 @@ def main() -> int:
     draft_path = resolve_draft_path(output_dir, args.draft)
 
     try:
-        raw = load_json(output_dir / "raw.json")
+        raw = read_json(output_dir / "raw.json")
         draft_text = require_text_file(draft_path, "report_draft.md")
         validate_draft(draft_text, draft_path)
-        id_url_map_path = output_dir / "id_url_map.json"
-        id_url_map = load_json(id_url_map_path) if id_url_map_path.exists() else {}
-        report = finalize_report(draft_text, raw, output_dir, id_url_map)
-    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        report = finalize_report(draft_text, raw, output_dir)
+    except (FileNotFoundError, ValueError) as exc:
         print(f"[x] {exc}", file=sys.stderr, flush=True)
         return 1
 

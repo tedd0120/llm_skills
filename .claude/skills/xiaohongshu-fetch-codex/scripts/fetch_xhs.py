@@ -17,6 +17,7 @@ if str(CORE_DIR) not in sys.path:
 
 from auth import get_auth_state_path
 from browser import build_launch_kwargs
+from schema import build_post_id_url_map, write_json
 from xhs_selectors import XHSSelectors as S
 
 
@@ -96,24 +97,18 @@ class XHSScraper:
                 "search_strategy": self.search_strategy,
                 "posts": all_posts,
             }
-            out = json.dumps(output_data, ensure_ascii=False, indent=2)
             if output_file:
-                Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-                Path(output_file).write_text(out, encoding="utf-8")
+                output_path = Path(output_file)
+                write_json(output_path, output_data)
                 print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
                 if self.hyperlinks:
-                    id_url_map = {}
-                    for post in all_posts:
-                        post_id = post.get("post_id", "")
-                        url = post.get("url", "")
-                        if post_id and url:
-                            id_url_map[post_id] = url
+                    id_url_map = build_post_id_url_map(all_posts)
                     if id_url_map:
-                        map_file = Path(output_file).parent / "id_url_map.json"
-                        map_file.write_text(json.dumps(id_url_map, ensure_ascii=False, indent=2), encoding="utf-8")
+                        map_file = output_path.parent / "id_url_map.json"
+                        write_json(map_file, id_url_map)
                         print(f"[✓] ID-URL 映射 → {map_file}", flush=True)
             else:
-                print(f"\n{out}")
+                print(f"\n{json.dumps(output_data, ensure_ascii=False, indent=2)}")
 
             ctx.close()
             browser.close()
