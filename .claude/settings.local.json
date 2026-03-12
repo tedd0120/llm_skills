@@ -27,7 +27,11 @@
       "Bash(start:*)",
       "Bash(wc:*)",
       "Bash(python -c \"import json; data=json.load\\(open\\('data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/raw_round_1.json','r',encoding='utf-8'\\)\\); ids=[p['note_id'] for p in data['posts']]; print\\('\\\\n'.join\\(ids\\)\\)\" > \"data/xiaohongshu/20260311_153952_OpenClaw国产替代方案/seen_ids.txt\")",
-      "Bash(cd P:/git_repos/llm_skills && mkdir -p openspec/changes/archive && mv openspec/changes/add-xhs-login-qr-reminder openspec/changes/archive/2026-03-11-add-xhs-login-qr-reminder && mv openspec/changes/fix-xhs-auth-path openspec/changes/archive/2026-03-11-fix-xhs-auth-path && echo \"Archive completed\")"
+      "Bash(cd P:/git_repos/llm_skills && mkdir -p openspec/changes/archive && mv openspec/changes/add-xhs-login-qr-reminder openspec/changes/archive/2026-03-11-add-xhs-login-qr-reminder && mv openspec/changes/fix-xhs-auth-path openspec/changes/archive/2026-03-11-fix-xhs-auth-path && echo \"Archive completed\")",
+      "Bash(git -C \"/p/git_repos/llm_skills\" diff HEAD -- \".claude/skills/xiaohongshu-core-codex/SKILL.md\" \".claude/skills/xiaohongshu-core-codex/scripts/schema.py\" \".claude/skills/xiaohongshu-fetch-codex/SKILL.md\" \".claude/skills/xiaohongshu-formatter/SKILL.md\" \".claude/skills/xiaohongshu-report-codex/SKILL.md\" \".claude/skills/xiaohongshu-report-codex/scripts/build_report.py\" \".claude/skills/xiaohongshu-scraper-codex/MIGRATION.md\" \".claude/skills/xiaohongshu-scraper-codex/SKILL.md\" \".claude/skills/xiaohongshu-scraper-codex/scripts/orchestrator.py\" \".claude/skills/xiaohongshu-summarize/SKILL.md\")",
+      "Bash(git -C \"/p/git_repos/llm_skills\" status --short)",
+      "Bash(git -C \"/p/git_repos/llm_skills\" diff --stat HEAD && git -C \"/p/git_repos/llm_skills\" diff HEAD -- \".claude/skills/xiaohongshu-core-codex/SKILL.md\" \".claude/skills/xiaohongshu-core-codex/scripts/schema.py\" \".claude/skills/xiaohongshu-fetch-codex/SKILL.md\" \".claude/skills/xiaohongshu-formatter/SKILL.md\" \".claude/skills/xiaohongshu-report-codex/SKILL.md\" \".claude/skills/xiaohongshu-report-codex/scripts/build_report.py\" \".claude/skills/xiaohongshu-scraper-codex/MIGRATION.md\" \".claude/skills/xiaohongshu-scraper-codex/SKILL.md\" \".claude/skills/xiaohongshu-scraper-codex/scripts/orchestrator.py\" \".claude/skills/xiaohongshu-summarize/SKILL.md\")",
+      "Bash(git add:*)"
     ]
   }
 }
