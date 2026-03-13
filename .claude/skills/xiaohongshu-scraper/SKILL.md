@@ -12,6 +12,7 @@ metadata:
 一站式小红书内容抓取与分析入口。作为编排层，协调各个子 skills 完成从数据抓取到报告生成的完整流程。
 
 **内部架构**：
+- `scripts/orchestrate_login.py` - 登录编排入口，负责轮询 `login_xhs.py` 输出并收敛为稳定事件
 - `scripts/login_xhs.py` - 单次调用内检查登录状态，并在需要时处理扫码登录
 - `xiaohongshu-fetch` - 执行浏览器自动化抓取，输出 raw.json（详见其 SKILL.md）
 - `xiaohongshu-summarize` - 分析数据并生成结构化报告（描述性 skill）
@@ -225,10 +226,10 @@ metadata:
 │  2. 创建任务清单                                               │
 │     → 写入 {OUTPUT_DIR}/tasks.md（5 项未勾选任务）             │
 │                                                             │
-│  3. 确保登录（后台轮询）                                        │
-│     → 后台启动 scripts/login_xhs.py（禁止阻塞等待）             │
-│     → 每 LOGIN_POLL_INTERVAL_SEC 秒轮询新增输出                │
-│     → NEED_LOGIN:<abs_path>：立即提醒用户扫码并展示绝对路径      │
+│  3. 确保登录（编排脚本）                                        │
+│     → 调用 scripts/orchestrate_login.py                        │
+│     → 由编排脚本后台管理 login_xhs.py 并按间隔轮询输出            │
+│     → LOGIN_EVENT / NEED_LOGIN:<abs_path>：立即提醒用户扫码       │
 │     → LOGIN_OK/LOGIN_SUCCESS：打勾 ✓ 继续执行                   │
 │     → LOGIN_TIMEOUT/LOGIN_FAILED：报错中止                      │
 │                                                             │
@@ -271,19 +272,22 @@ scraper 通过以下参数在子 skills 间传递上下文：
 | `divergence_params` | object | 发散模式参数配置 | fetch |
 | `hyperlinks` | boolean | 是否启用超链接功能 | fetch, summarize, formatter |
 
-#### 登录步骤执行模板（后台轮询）
+#### 登录步骤执行模板（调用编排脚本）
 
 ```text
 1) 读取 LOGIN_POLL_INTERVAL_SEC（默认 2；非法值回退到 2）
-2) 后台启动：python .claude/skills/xiaohongshu-scraper/scripts/login_xhs.py
-3) 循环轮询新增输出（间隔 = LOGIN_POLL_INTERVAL_SEC）：
-   - 出现 NEED_LOGIN:<abs_path>：
-     立即向用户发送：
+2) 调用：python .claude/skills/xiaohongshu-scraper/scripts/orchestrate_login.py --poll-interval <LOGIN_POLL_INTERVAL_SEC> --tasks-file <tasks_file_path>
+3) 监听 orchestrate_login.py 输出：
+   - 原样透传 login_xhs.py 输出，保留 COOKIE_FINGERPRINT 等排障信息
+   - 重点关注 LOGIN_EVENT: {...} 结构化事件
+4) 出现 NEED_LOGIN:<abs_path> 或 `LOGIN_EVENT: {"event": "NEED_LOGIN", ...}`：
+   - 立即向用户发送：
      “请扫码登录小红书。二维码文件：<abs_path>”
-   - 出现 LOGIN_OK 或 LOGIN_SUCCESS：
-     标记”确保登录”为完成，退出轮询
-   - 出现 LOGIN_TIMEOUT 或 LOGIN_FAILED：
-     报错并中止执行阶段
+5) 出现 LOGIN_OK / LOGIN_SUCCESS（或对应 LOGIN_EVENT）后：
+   - orchestrate_login.py 会负责将 tasks.md 中“确保登录”标记为完成
+   - 继续执行下一步
+6) 出现 LOGIN_TIMEOUT / LOGIN_FAILED / ORCHESTRATOR_ERROR 后：
+   - 报错并中止执行阶段
 ```
 
 #### 发散模式执行约束
@@ -356,10 +360,10 @@ scraper 通过以下参数在子 skills 间传递上下文：
 6. **[核心要求]** 目录时间戳必须使用当前系统时间，禁止使用示例或虚构时间
 7. **[核心要求]** 进入阶段二后必须立即创建 `{OUTPUT_DIR}/tasks.md`，包含 5 项未勾选任务
 8. **[核心要求]** 每完成一项任务必须立即更新 tasks.md，将 `[ ]` 改为 `[x]`
-9. **[核心要求]** 确保登录步骤必须使用后台轮询模式：
-   - 必须后台启动 `scripts/login_xhs.py`，禁止阻塞等待到脚本结束后再处理输出
-   - 必须按 `LOGIN_POLL_INTERVAL_SEC` 间隔轮询新增输出（默认 2 秒；非法值回退到 2 秒）
-   - 检测到 `NEED_LOGIN:<abs_path>` 时，必须立即提示用户扫码并展示二维码绝对路径
+9. **[核心要求]** 确保登录步骤必须通过 `scripts/orchestrate_login.py` 执行：
+   - 必须调用 `scripts/orchestrate_login.py`，禁止让 Agent 自己手写后台轮询 `login_xhs.py`
+   - 编排脚本必须按 `LOGIN_POLL_INTERVAL_SEC` 间隔轮询新增输出（默认 2 秒；非法值回退到 2 秒）
+   - 检测到 `NEED_LOGIN:<abs_path>` 或对应 `LOGIN_EVENT` 时，必须立即提示用户扫码并展示二维码绝对路径
    - 检测到 `LOGIN_OK` 或 `LOGIN_SUCCESS` 后，才能打勾并进入下一步
    - 检测到 `LOGIN_TIMEOUT` 或 `LOGIN_FAILED` 时，必须报错中止，禁止继续抓取
 10. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
@@ -435,7 +439,7 @@ export DISPLAY=:99
 
 | 问题 | 原因 | 处理方式 |
 |-----|------|---------|
-| 检测到未登录 | Cookie 过期或未登录 | 执行 `scripts/login_xhs.py`，在当前会话中完成扫码登录 |
+| 检测到未登录 | Cookie 过期或未登录 | 执行 `scripts/orchestrate_login.py`，由其拉起 `login_xhs.py` 并在当前会话中完成扫码登录 |
 | 风控封禁 | 小红书检测到自动化 | 脚本已内置延时，**禁止取消延时** |
 | 元素选择器失效 | 小红书页面改版 | 检查 `scripts/xhs_selectors.py` 并更新选择器 |
 | 二维码过期或超时 | 登录等待时间过长 | 使用 `--timeout N` 调整超时时间 |
