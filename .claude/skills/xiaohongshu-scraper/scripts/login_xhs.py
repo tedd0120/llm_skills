@@ -4,6 +4,7 @@
 """
 
 import argparse
+import hashlib
 import io
 import os
 import sys
@@ -22,6 +23,36 @@ if sys.platform == "win32":
 
 load_dotenv()
 
+SCRAPER_SCRIPT_DIR = Path(__file__).parent.resolve()
+AUTH_STATE_PATH = (SCRAPER_SCRIPT_DIR / "xhs_auth.json").resolve()
+QR_IMAGE_PATH = (SCRAPER_SCRIPT_DIR / "xhs_qr_login.png").resolve()
+
+
+def build_cookie_fingerprint(path: Path) -> dict:
+    resolved = path.resolve()
+    fingerprint = {
+        "path": str(resolved),
+        "exists": resolved.exists(),
+    }
+    if not resolved.exists():
+        return fingerprint
+
+    stat = resolved.stat()
+    fingerprint["mtime"] = stat.st_mtime
+    fingerprint["size"] = stat.st_size
+    fingerprint["sha256"] = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    return fingerprint
+
+
+def format_cookie_fingerprint(fingerprint: dict) -> str:
+    if not fingerprint.get("exists"):
+        return f"path={fingerprint['path']} exists=False"
+    return (
+        f"path={fingerprint['path']} exists=True "
+        f"mtime={fingerprint['mtime']:.6f} size={fingerprint['size']} "
+        f"sha256={fingerprint['sha256']}"
+    )
+
 
 class XHSLogin:
     def __init__(self):
@@ -33,20 +64,29 @@ class XHSLogin:
             print("    export DISPLAY=:99", file=sys.stderr, flush=True)
             sys.exit(1)
 
-        SCRIPT_DIR = Path(__file__).parent.resolve()
-        self.auth_state_path = os.environ.get(
-            "XHS_AUTH_STATE",
-            str(SCRIPT_DIR / "xhs_auth.json"),
-        )
-        # 确保 auth 文件所在目录存在
-        Path(self.auth_state_path).parent.mkdir(parents=True, exist_ok=True)
-        self.qr_path = str((Path.cwd() / "xhs_qr_login.png").resolve())
+        self.auth_state_path = AUTH_STATE_PATH
+        self.auth_state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.qr_path = QR_IMAGE_PATH
+
+    def _print_cookie_fingerprint(self, stage: str):
+        fingerprint = build_cookie_fingerprint(self.auth_state_path)
+        print(f"COOKIE_FINGERPRINT[{stage}] {format_cookie_fingerprint(fingerprint)}", flush=True)
+        return fingerprint
+
+    def _persist_auth_state(self, ctx, stage: str):
+        ctx.storage_state(path=str(self.auth_state_path))
+        fingerprint = self._print_cookie_fingerprint(stage)
+        if not fingerprint.get("exists"):
+            raise RuntimeError("Cookie 文件写入失败")
+        return fingerprint
 
     def _build_context(self, browser):
-        if os.path.exists(self.auth_state_path):
+        self._print_cookie_fingerprint("login-before-load")
+        if self.auth_state_path.exists():
             try:
-                return browser.new_context(storage_state=self.auth_state_path)
-            except Exception:
+                return browser.new_context(storage_state=str(self.auth_state_path))
+            except Exception as exc:
+                print(f"[!] Cookie 加载失败，改用空白上下文: {exc}", flush=True)
                 return browser.new_context()
         return browser.new_context()
 
@@ -102,7 +142,7 @@ class XHSLogin:
 
             try:
                 if self._is_logged_in(page):
-                    ctx.storage_state(path=self.auth_state_path)
+                    self._persist_auth_state(ctx, "login-ok")
                     print("LOGIN_OK", flush=True)
                     return 0
 
@@ -124,7 +164,7 @@ class XHSLogin:
                     print("LOGIN_FAILED", flush=True)
                     return 1
 
-                ctx.storage_state(path=self.auth_state_path)
+                self._persist_auth_state(ctx, "login-success")
                 self._cleanup_qr()
                 print("LOGIN_SUCCESS", flush=True)
                 return 0

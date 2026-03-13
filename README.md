@@ -1,6 +1,6 @@
 # LLM Skills
 
-本项目汇集了专为 LLM Agent 设计的工具调用技能（Skills），皆在增强 AI 智能体的垂直领域能力，涵盖金融数据获取与办公自动化等场景。
+本项目汇集了专为 LLM Agent 设计的工具调用技能（Skills），旨在增强 AI 智能体的垂直领域能力，涵盖金融数据获取与办公自动化等场景。
 
 ## 📁 技能列表
 
@@ -24,16 +24,19 @@
 
 ### 🔍 社交媒体 (Social Media)
 
-*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper-codex`]: 小红书 codex 新架构推荐入口。由单一入口 skill 负责澄清与进度展示，并通过内部 orchestrator 串联抓取、报告生成与最终校验。支持固定关键词模式与发散模式，保留旧版技能作为兼容参考。
+*   **小红书内容抓取 (Xiaohongshu Scraper)** [`xiaohongshu-scraper`]: 一站式小红书内容抓取与分析入口。
 
-    **codex 架构**：
-    - [`xiaohongshu-scraper-codex`] - 推荐入口（澄清 + 进度 + orchestrator 调度）
-    - [`xiaohongshu-fetch-codex`] - 数据抓取引擎（内部组件）
-    - [`xiaohongshu-report-codex`] - 统一报告流水线（内部组件）
-    - [`xiaohongshu-core-codex`] - 共享基础层（内部组件）
+    **架构说明**：
+    - [`xiaohongshu-scraper`] - 编排层入口，负责澄清阶段、任务调度与进度管理
+    - [`xiaohongshu-fetch`] - 数据抓取引擎，执行浏览器自动化抓取（内部组件）
+    - [`xiaohongshu-summarize`] - 报告生成组件，分析数据并输出结构化报告（内部组件）
+    - [`xiaohongshu-formatter`] - 格式化组件，增强报告可读性与 emoji（内部组件）
 
-    **旧版保留**：
-    - [`xiaohongshu-scraper`]、[`xiaohongshu-fetch`]、[`xiaohongshu-summarize`]、[`xiaohongshu-formatter`] 继续保留，用于兼容参考与历史行为对照。
+    **核心特性**：
+    - 支持固定关键词模式与 AI 发散模式
+    - 自动登录检测与扫码登录
+    - 多轮发散搜索，动态决定下一关键词
+    - 任务清单验证，确保流程完整性
 
 ## 🚀 使用指南
 
@@ -52,7 +55,21 @@
 ├── finance-data-*/         # 金融相关技能集
 ├── teams-attendance/       # 考勤自动化技能
 ├── teams-group-members/    # 群组成员与组织树技能
-└── xiaohongshu-*/          # 小红书技能集（scraper, fetch, summarize, formatter, login）
+└── xiaohongshu-*/          # 小红书技能集（scraper, fetch, summarize, formatter）
+
 data/                       # 本地数据存储目录（已添加至 .gitignore）
 openspec/                   # 开放规范文档
 ```
+
+## ⚙️ 环境配置
+
+复制 `.env.example` 为 `.env` 并填写必要的配置项：
+
+```bash
+cp .env.example .env
+```
+
+详见 `.env.example` 文件中的配置说明。
+
+其中小红书 skill 的登录 Cookie 路径现已固定为 `.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json`，由 skill 内部基于脚本位置自动定位，不再依赖 `.env` 中的 `XHS_AUTH_STATE` 配置。
+登录脚本与抓取脚本都会输出同口径的 Cookie 指纹（绝对路径、mtime、size、sha256），用于确认两者读写的是同一份 Cookie 文件。

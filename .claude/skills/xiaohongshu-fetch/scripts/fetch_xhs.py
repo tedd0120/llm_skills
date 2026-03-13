@@ -11,6 +11,7 @@ import json
 import time
 import random
 import argparse
+import hashlib
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -27,6 +28,37 @@ if sys.platform == "win32":
 
 # 加载环境变量
 load_dotenv()
+
+FETCH_SCRIPT_DIR = Path(__file__).parent.resolve()
+AUTH_STATE_PATH = (
+    FETCH_SCRIPT_DIR.parent.parent / "xiaohongshu-scraper" / "scripts" / "xhs_auth.json"
+).resolve()
+
+
+def build_cookie_fingerprint(path: Path) -> dict:
+    resolved = path.resolve()
+    fingerprint = {
+        "path": str(resolved),
+        "exists": resolved.exists(),
+    }
+    if not resolved.exists():
+        return fingerprint
+
+    stat = resolved.stat()
+    fingerprint["mtime"] = stat.st_mtime
+    fingerprint["size"] = stat.st_size
+    fingerprint["sha256"] = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    return fingerprint
+
+
+def format_cookie_fingerprint(fingerprint: dict) -> str:
+    if not fingerprint.get("exists"):
+        return f"path={fingerprint['path']} exists=False"
+    return (
+        f"path={fingerprint['path']} exists=True "
+        f"mtime={fingerprint['mtime']:.6f} size={fingerprint['size']} "
+        f"sha256={fingerprint['sha256']}"
+    )
 
 
 class XHSScraper:
@@ -49,12 +81,7 @@ class XHSScraper:
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
         self.hyperlinks = hyperlinks
-        SCRIPT_DIR = Path(__file__).parent.resolve()
-        SKILLS_DIR = SCRIPT_DIR.parent.parent  # scripts -> xiaohongshu-fetch -> skills
-        self.auth_state_path = os.environ.get(
-            'XHS_AUTH_STATE',
-            str(SKILLS_DIR / "xiaohongshu-scraper" / "scripts" / "xhs_auth.json"),
-        )
+        self.auth_state_path = AUTH_STATE_PATH
 
     # ------------------------------------------------------------------
     # helpers
@@ -62,6 +89,11 @@ class XHSScraper:
     @staticmethod
     def _sleep(lo=3, hi=8):
         time.sleep(random.uniform(lo, hi))
+
+    def _print_cookie_fingerprint(self, stage: str):
+        fingerprint = build_cookie_fingerprint(self.auth_state_path)
+        print(f"COOKIE_FINGERPRINT[{stage}] {format_cookie_fingerprint(fingerprint)}", flush=True)
+        return fingerprint
 
     @staticmethod
     def _txt(page: Page, sel: str, default: str = "") -> str:
@@ -104,12 +136,15 @@ class XHSScraper:
 
             # Cookie
             ctx = None
-            if os.path.exists(self.auth_state_path):
+            fingerprint = self._print_cookie_fingerprint("fetch-before-load")
+            if self.auth_state_path.exists():
                 try:
-                    ctx = browser.new_context(storage_state=self.auth_state_path)
+                    ctx = browser.new_context(storage_state=str(self.auth_state_path))
                     print(f"[*] Cookie 已加载: {self.auth_state_path}", flush=True)
                 except Exception as e:
                     print(f"[!] Cookie 加载失败: {e}", flush=True)
+            else:
+                print(f"[!] Cookie 文件不存在: {fingerprint['path']}", flush=True)
             if ctx is None:
                 ctx = browser.new_context()
 
