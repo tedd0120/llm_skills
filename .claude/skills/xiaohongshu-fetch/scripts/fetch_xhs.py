@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from xhs_selectors import XHSSelectors as S
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PwTimeout
+from playwright_stealth import Stealth
 
 # Windows 兼容：强制 UTF-8 输出
 if sys.platform == "win32":
@@ -122,6 +123,15 @@ class XHSScraper:
         with self.seen_ids_path.open("a", encoding="utf-8") as f:
             f.write(payload)
 
+    @staticmethod
+    def _save_debug_screenshot(page: Page, label: str):
+        try:
+            path = Path(f"xhs_debug_{label}_{int(time.time())}.png")
+            page.screenshot(path=str(path))
+            print(f"[DEBUG] 截图已保存: {path}", flush=True)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # 入口
     # ------------------------------------------------------------------
@@ -130,25 +140,31 @@ class XHSScraper:
             launch_kw = {"headless": False}
             if sys.platform == 'win32':
                 launch_kw["channel"] = "msedge"
-                launch_kw["args"] = ["--window-position=-2400,-2400"]
 
             browser = pw.chromium.launch(**launch_kw)
+
+            ctx_kw = {
+                "viewport": {"width": 1280, "height": 800},
+                "locale": "zh-CN",
+                "timezone_id": "Asia/Shanghai",
+            }
 
             # Cookie
             ctx = None
             fingerprint = self._print_cookie_fingerprint("fetch-before-load")
             if self.auth_state_path.exists():
                 try:
-                    ctx = browser.new_context(storage_state=str(self.auth_state_path))
+                    ctx = browser.new_context(storage_state=str(self.auth_state_path), **ctx_kw)
                     print(f"[*] Cookie 已加载: {self.auth_state_path}", flush=True)
                 except Exception as e:
                     print(f"[!] Cookie 加载失败: {e}", flush=True)
             else:
                 print(f"[!] Cookie 文件不存在: {fingerprint['path']}", flush=True)
             if ctx is None:
-                ctx = browser.new_context()
+                ctx = browser.new_context(**ctx_kw)
 
             page = ctx.new_page()
+            Stealth().apply_stealth_sync(page)
 
             # 1) 搜索 + 抓取（均分 + 回收策略）
             all_posts = []
@@ -213,12 +229,45 @@ class XHSScraper:
         以及"登录后关注"等按钮，这些并不意味着用户未登录。
         只有出现遮罩层 + 登录弹窗的组合，才是真正的强制登录状态。
         """
-        # 1. URL 检测：如果跳转到登录页，说明需要登录
-        if "login" in page.url.lower():
+        # 1. URL 检测
+        url_lower = page.url.lower()
+        if "website-login/error" in url_lower:
+            # 风控限速，不是真正的未登录
+            error_msg = ""
+            if "error_msg=" in page.url:
+                import urllib.parse
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
+                error_msg = urllib.parse.unquote(qs.get("error_msg", [""])[0])
+            print(f"[!] 检测到风控限速跳转: {error_msg or page.url}", flush=True)
+            self._save_debug_screenshot(page, "rate_limit")
+            print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+            time.sleep(30)
+            return True
+        if "login" in url_lower:
+            print(f"[!] 检测到登录页跳转: {page.url}", flush=True)
+            self._save_debug_screenshot(page, "login_redirect")
+            print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+            time.sleep(30)
             return True
 
         try:
-            # 2. 检测强制登录弹窗：遮罩层 + 登录弹窗同时出现
+            # 2. 检测验证码/风控页面
+            captcha_indicators = [
+                "text=请完成验证",
+                "text=滑动验证",
+                ".captcha-verify",
+                "#captcha",
+            ]
+            for sel in captcha_indicators:
+                loc = page.locator(sel)
+                if loc.count() > 0 and loc.first.is_visible():
+                    print(f"[!] 检测到风控验证页: {sel}", flush=True)
+                    self._save_debug_screenshot(page, "captcha")
+                    print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                    time.sleep(30)
+                    return True
+
+            # 3. 检测强制登录弹窗：遮罩层 + 登录弹窗同时出现
             # 这才是真正的"未登录需要登录"状态
             login_modal = page.locator(S.LOGIN_MODAL)
             overlay = page.locator(S.LOGIN_OVERLAY)
@@ -227,13 +276,19 @@ class XHSScraper:
             overlay_visible = overlay.count() > 0 and overlay.first.is_visible()
 
             if modal_visible and overlay_visible:
+                self._save_debug_screenshot(page, "login_modal")
+                print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                time.sleep(30)
                 return True
 
-            # 3. 备用检测：登录弹窗内有明显的"登录"标题且可见
+            # 4. 备用检测：登录弹窗内有明显的"登录"标题且可见
             # 避免误判普通的登录引导按钮
             login_title = page.locator(S.LOGIN_MODAL_TITLE)
             if modal_visible and login_title.count() > 0:
                 if login_title.first.is_visible():
+                    self._save_debug_screenshot(page, "login_title")
+                    print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                    time.sleep(30)
                     return True
 
         except Exception:
@@ -243,7 +298,7 @@ class XHSScraper:
 
     @staticmethod
     def _exit_not_logged_in():
-        print("[✗] 检测到未登录，请先执行 xiaohongshu-login skill", flush=True)
+        print("[✗] 检测到登录态异常或风控拦截，请检查 Cookie 或稍后重试", flush=True)
         sys.exit(1)
 
     # ------------------------------------------------------------------
@@ -263,7 +318,8 @@ class XHSScraper:
         except PwTimeout:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
-            print("  [!] 搜索结果加载超时", flush=True)
+            print(f"  [!] 搜索结果加载超时 | URL: {page.url} | title: {page.title()}", flush=True)
+            self._save_debug_screenshot(page, f"search_timeout_{keyword[:10]}")
             return []
 
         self._sleep(2, 4)
@@ -300,14 +356,64 @@ class XHSScraper:
 
         print(f"  找到 {len(hrefs)} 篇（去重后），抓前 {limit} 篇", flush=True)
 
+        # 回到搜索结果页顶部，准备点击抓取
+        page.evaluate("window.scrollTo(0, 0)")
+        self._sleep(1, 2)
+
         results = []
+        card_index = 0
         for i, post_url in enumerate(hrefs[:limit]):
             print(f"  [{i+1}/{min(limit,len(hrefs))}] {post_url[:80]}…", flush=True)
-            data = self._extract_post(page, post_url)
+            # 全部使用 click 操作，避免 go_back/goto 触发风控
+            data = None
+            cards = page.locator(S.POST_CARD).all()
+            if card_index < len(cards):
+                try:
+                    cards[card_index].scroll_into_view_if_needed()
+                    self._sleep(0.5, 1)
+                    cards[card_index].click()
+                    data = self._extract_post_after_click(page, post_url)
+                    # 点击关闭按钮返回搜索页（而非 go_back）
+                    close_btn = page.locator(S.CLOSE_BUTTON)
+                    if close_btn.count() > 0:
+                        close_btn.first.click()
+                    else:
+                        # 回退：按 ESC 键
+                        page.keyboard.press("Escape")
+                    self._sleep(1, 2)
+                except Exception as e:
+                    print(f"    [!] 点击操作失败: {e}", flush=True)
+                    self._save_debug_screenshot(page, f"click_fail_{i}")
+                    # 尝试按 ESC 返回
+                    try:
+                        page.keyboard.press("Escape")
+                        self._sleep(1, 2)
+                    except:
+                        pass
+            else:
+                print(f"    [!] 卡片索引超出范围，跳过", flush=True)
+            card_index += 1
             if data:
                 results.append(data)
             self._sleep(3, 8)
         return results
+
+    # ------------------------------------------------------------------
+    # 帖子提取（点击导航版）
+    # ------------------------------------------------------------------
+    def _extract_post_after_click(self, page: Page, expected_url: str) -> dict | None:
+        try:
+            page.wait_for_selector("#detail-title, .title, .note-content", timeout=10000)
+            if self._is_not_logged_in(page):
+                self._exit_not_logged_in()
+            self._sleep(1, 2)
+        except PwTimeout:
+            if self._is_not_logged_in(page):
+                self._exit_not_logged_in()
+            print("    [!] 帖子加载超时，跳过", flush=True)
+            self._save_debug_screenshot(page, "post_timeout_click")
+            return None
+        return self._extract_post_data(page, expected_url)
 
     # ------------------------------------------------------------------
     # 帖子提取
@@ -323,8 +429,11 @@ class XHSScraper:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
             print("    [!] 帖子加载超时，跳过", flush=True)
+            self._save_debug_screenshot(page, "post_timeout")
             return None
+        return self._extract_post_data(page, url)
 
+    def _extract_post_data(self, page: Page, url: str) -> dict | None:
         title   = self._txt(page, "#detail-title") or self._txt(page, ".title")
         content = self._txt(page, ".note-content") or self._txt(page, "#detail-desc")
         author  = self._txt(page, ".username")

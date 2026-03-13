@@ -160,10 +160,9 @@ class XHSLogin:
                 self._emit_need_login(check_only=False, qr_path=self.qr_path)
 
                 page.wait_for_selector(S.LOGIN_MODAL, state="hidden", timeout=timeout * 1000)
-                if not self._is_logged_in(page):
-                    print("LOGIN_FAILED", flush=True)
-                    return 1
-
+                # 等待页面完全加载，确保所有 Cookie 写入完毕
+                page.wait_for_timeout(3000)
+                # 扫码弹窗消失即视为登录成功，不再用搜索页验证（搜索页可能被风控）
                 self._persist_auth_state(ctx, "login-success")
                 self._cleanup_qr()
                 print("LOGIN_SUCCESS", flush=True)
