@@ -53,6 +53,30 @@ def normalize_poll_interval(raw_value: str) -> float:
     return value
 
 
+TASKS_TEMPLATE = """## 执行任务清单
+
+- [ ] 确保登录
+- [ ] 抓取数据
+- [ ] 生成报告
+- [ ] 格式化报告
+- [ ] 发送报告
+"""
+
+
+def init_output_dir(output_dir: Path) -> Path:
+    """
+    初始化输出目录和 tasks.md。
+    如果目录已存在则跳过创建，如果 tasks.md 已存在则不覆盖。
+    返回 tasks.md 的路径。
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tasks_file = output_dir / "tasks.md"
+    if not tasks_file.exists():
+        tasks_file.write_text(TASKS_TEMPLATE, encoding="utf-8")
+        print(f"[*] 已创建任务清单: {tasks_file}", flush=True)
+    return tasks_file
+
+
 def update_login_task(tasks_file: Path) -> None:
     if not tasks_file.exists():
         raise FileNotFoundError(f"tasks.md 文件不存在: {tasks_file}")
@@ -178,11 +202,26 @@ def main() -> None:
         default=str(int(DEFAULT_POLL_INTERVAL_SEC)),
         help="登录输出轮询间隔（秒），默认 2；非法值回退到 2",
     )
-    parser.add_argument("--tasks-file", help="可选，登录成功后自动勾选 tasks.md 中的“确保登录”")
+    parser.add_argument(
+        "--output-dir",
+        help="输出目录路径，自动创建目录和 tasks.md（推荐使用此参数替代 --tasks-file）",
+    )
+    parser.add_argument(
+        "--tasks-file",
+        help="(已废弃) 可选，登录成功后自动勾选 tasks.md 中的确保登录",
+    )
     args = parser.parse_args()
 
     poll_interval = normalize_poll_interval(args.poll_interval)
-    tasks_file = Path(args.tasks_file).resolve() if args.tasks_file else None
+
+    # 优先使用 --output-dir，自动初始化目录和 tasks.md
+    if args.output_dir:
+        output_dir = Path(args.output_dir).resolve()
+        tasks_file = init_output_dir(output_dir)
+    elif args.tasks_file:
+        tasks_file = Path(args.tasks_file).resolve()
+    else:
+        tasks_file = None
 
     try:
         code = run_login(timeout=args.timeout, poll_interval=poll_interval, tasks_file=tasks_file)

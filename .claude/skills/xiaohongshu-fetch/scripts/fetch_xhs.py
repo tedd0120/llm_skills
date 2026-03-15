@@ -69,6 +69,7 @@ class XHSScraper:
         search_strategy: list = None,
         seen_ids_path: str = "",
         hyperlinks: bool = False,
+        speed_mode: bool = False,
     ):
         # 强制有头模式：在无 DISPLAY 时报错退出
         if sys.platform != 'win32' and not os.environ.get('DISPLAY'):
@@ -82,6 +83,7 @@ class XHSScraper:
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
         self.hyperlinks = hyperlinks
+        self.speed_mode = speed_mode
         self.auth_state_path = AUTH_STATE_PATH
 
     # ------------------------------------------------------------------
@@ -89,7 +91,13 @@ class XHSScraper:
     # ------------------------------------------------------------------
     @staticmethod
     def _sleep(lo=3, hi=8):
+        """静态方法：保持原有行为（用于外部调用兼容）"""
         time.sleep(random.uniform(lo, hi))
+
+    def _do_sleep(self, lo=3, hi=8):
+        """实例方法：极速模式下跳过延时"""
+        if not self.speed_mode:
+            time.sleep(random.uniform(lo, hi))
 
     def _print_cookie_fingerprint(self, stage: str):
         fingerprint = build_cookie_fingerprint(self.auth_state_path)
@@ -122,6 +130,48 @@ class XHSScraper:
         payload = "".join(f"{note_id}\n" for note_id in sorted(new_ids))
         with self.seen_ids_path.open("a", encoding="utf-8") as f:
             f.write(payload)
+
+    @staticmethod
+    def _parse_int(value: str, default: int = 0) -> int:
+        """将字符串转换为整数，失败返回默认值"""
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    def _save_results(self, all_posts: list, output_file: str, keywords: list):
+        """保存抓取结果到文件"""
+        if not all_posts or not output_file:
+            return
+
+        output_data = {
+            "search_time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "keywords": keywords,
+            "search_strategy": self.search_strategy,
+            "posts": all_posts,
+        }
+        out = json.dumps(output_data, ensure_ascii=False, indent=2)
+        Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_file).write_text(out, encoding="utf-8")
+        print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
+
+        # 生成 id_url_map.json（超链接启用时）
+        if self.hyperlinks:
+            id_url_map = {}
+            for post in all_posts:
+                post_id = post.get("post_id", "")
+                url = post.get("url", "")
+                if post_id and url:
+                    id_url_map[post_id] = url
+
+            if id_url_map:
+                output_dir = Path(output_file).parent
+                map_file = output_dir / "id_url_map.json"
+                map_file.write_text(
+                    json.dumps(id_url_map, ensure_ascii=False, indent=2),
+                    encoding="utf-8"
+                )
+                print(f"[✓] ID-URL 映射 → {map_file}", flush=True)
 
     @staticmethod
     def _save_debug_screenshot(page: Page, label: str):
@@ -172,52 +222,31 @@ class XHSScraper:
             seen = self._load_seen_ids()
             new_seen_ids = set()
             remaining_total = self.max_posts
-            for idx, kw in enumerate(keywords):
-                if remaining_total <= 0:
-                    break
-                remaining_kws = len(keywords) - idx
-                quota = remaining_total // remaining_kws  # 均分
-                if remaining_total % remaining_kws != 0:
-                    quota += 1  # 余数给当前关键词多 1 篇
-                print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})", flush=True)
-                posts = self._search_keyword(page, kw, quota, seen, new_seen_ids)
-                all_posts.extend(posts)
-                remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
 
-            self._append_seen_ids(new_seen_ids)
-
-            # 2) 输出
-            output_data = {
-                "search_time": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "keywords": keywords,
-                "search_strategy": self.search_strategy,
-                "posts": all_posts,
-            }
-            out = json.dumps(output_data, ensure_ascii=False, indent=2)
-            if output_file:
-                Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-                Path(output_file).write_text(out, encoding="utf-8")
-                print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
-
-                # 生成 id_url_map.json（超链接启用时）
-                if self.hyperlinks and output_file:
-                    id_url_map = {}
-                    for post in all_posts:
-                        post_id = post.get("post_id", "")
-                        url = post.get("url", "")
-                        if post_id and url:
-                            id_url_map[post_id] = url
-
-                    if id_url_map:
-                        output_dir = Path(output_file).parent
-                        map_file = output_dir / "id_url_map.json"
-                        map_file.write_text(
-                            json.dumps(id_url_map, ensure_ascii=False, indent=2),
-                            encoding="utf-8"
-                        )
-                        print(f"[✓] ID-URL 映射 → {map_file}", flush=True)
-            else:
-                print("\n" + out)
+            try:
+                for idx, kw in enumerate(keywords):
+                    if remaining_total <= 0:
+                        break
+                    remaining_kws = len(keywords) - idx
+                    quota = remaining_total // remaining_kws  # 均分
+                    if remaining_total % remaining_kws != 0:
+                        quota += 1  # 余数给当前关键词多 1 篇
+                    print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})", flush=True)
+                    try:
+                        posts = self._search_keyword(page, kw, quota, seen, new_seen_ids)
+                        all_posts.extend(posts)
+                        remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
+                    except Exception as e:
+                        print(f"[!] 关键词 '{kw}' 抓取失败: {e}", flush=True)
+                        self._save_debug_screenshot(page, f"keyword_error_{kw[:10]}")
+                        continue  # 继续下一个关键词
+            finally:
+                # 无论是否异常，都保存已抓取的数据
+                if all_posts:
+                    self._save_results(all_posts, output_file, keywords)
+                    self._append_seen_ids(new_seen_ids)
+                elif output_file:
+                    print(f"\n[!] 未抓取到任何帖子", flush=True)
 
             ctx.close()
             browser.close()
@@ -241,14 +270,16 @@ class XHSScraper:
                 error_msg = urllib.parse.unquote(qs.get("error_msg", [""])[0])
             print(f"[!] 检测到风控限速跳转: {error_msg or page.url}", flush=True)
             self._save_debug_screenshot(page, "rate_limit")
-            print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
-            time.sleep(30)
+            if not self.speed_mode:
+                print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                time.sleep(30)
             return True
         if "login" in url_lower:
             print(f"[!] 检测到登录页跳转: {page.url}", flush=True)
             self._save_debug_screenshot(page, "login_redirect")
-            print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
-            time.sleep(30)
+            if not self.speed_mode:
+                print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                time.sleep(30)
             return True
 
         try:
@@ -264,8 +295,9 @@ class XHSScraper:
                 if loc.count() > 0 and loc.first.is_visible():
                     print(f"[!] 检测到风控验证页: {sel}", flush=True)
                     self._save_debug_screenshot(page, "captcha")
-                    print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
-                    time.sleep(30)
+                    if not self.speed_mode:
+                        print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                        time.sleep(30)
                     return True
 
             # 3. 检测强制登录弹窗：遮罩层 + 登录弹窗同时出现
@@ -278,8 +310,9 @@ class XHSScraper:
 
             if modal_visible and overlay_visible:
                 self._save_debug_screenshot(page, "login_modal")
-                print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
-                time.sleep(30)
+                if not self.speed_mode:
+                    print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                    time.sleep(30)
                 return True
 
             # 4. 备用检测：登录弹窗内有明显的"登录"标题且可见
@@ -288,8 +321,9 @@ class XHSScraper:
             if modal_visible and login_title.count() > 0:
                 if login_title.first.is_visible():
                     self._save_debug_screenshot(page, "login_title")
-                    print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
-                    time.sleep(30)
+                    if not self.speed_mode:
+                        print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
+                        time.sleep(30)
                     return True
 
         except Exception:
@@ -323,7 +357,7 @@ class XHSScraper:
             self._save_debug_screenshot(page, f"search_timeout_{keyword[:10]}")
             return []
 
-        self._sleep(2, 4)
+        self._do_sleep(2, 4)
 
         # 收集帖子链接 — 滚动加载瀑布流以获取更多结果
         hrefs = []
@@ -353,26 +387,39 @@ class XHSScraper:
 
             # 向下滚动触发瀑布流加载
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            self._sleep(2, 4)
+            self._do_sleep(2, 4)
 
         print(f"  找到 {len(hrefs)} 篇（去重后），抓前 {limit} 篇", flush=True)
 
         # 回到搜索结果页顶部，准备点击抓取
         page.evaluate("window.scrollTo(0, 0)")
-        self._sleep(1, 2)
+        self._do_sleep(1, 2)
 
         results = []
-        card_index = 0
+        scroll_y = 0  # 当前滚动位置
         for i, post_url in enumerate(hrefs[:limit]):
             print(f"  [{i+1}/{min(limit,len(hrefs))}] {post_url[:80]}…", flush=True)
-            # 全部使用 click 操作，避免 go_back/goto 触发风控
+
+            # 使用 POST_LINK 直接点击，保持与收集链接时的选择器一致
             data = None
-            cards = page.locator(S.POST_CARD).all()
-            if card_index < len(cards):
+            link_elements = page.locator(S.POST_LINK).all()
+
+            # 如果索引超出范围，尝试向下滚动触发虚拟渲染
+            max_scroll_retry = 3
+            retry = 0
+            while i >= len(link_elements) and retry < max_scroll_retry:
+                scroll_y += 500
+                page.evaluate(f"window.scrollTo(0, {scroll_y})")
+                self._do_sleep(1, 2)
+                link_elements = page.locator(S.POST_LINK).all()
+                retry += 1
+                print(f"    [*] 滚动加载更多元素 (y={scroll_y}, retry={retry})", flush=True)
+
+            if i < len(link_elements):
                 try:
-                    cards[card_index].scroll_into_view_if_needed()
-                    self._sleep(0.5, 1)
-                    cards[card_index].click()
+                    link_elements[i].scroll_into_view_if_needed()
+                    self._do_sleep(0.5, 1)
+                    link_elements[i].click()
                     data = self._extract_post_after_click(page, post_url)
                     # 点击关闭按钮返回搜索页（而非 go_back）
                     close_btn = page.locator(S.CLOSE_BUTTON)
@@ -381,22 +428,21 @@ class XHSScraper:
                     else:
                         # 回退：按 ESC 键
                         page.keyboard.press("Escape")
-                    self._sleep(1, 2)
+                    self._do_sleep(1, 2)
                 except Exception as e:
                     print(f"    [!] 点击操作失败: {e}", flush=True)
                     self._save_debug_screenshot(page, f"click_fail_{i}")
                     # 尝试按 ESC 返回
                     try:
                         page.keyboard.press("Escape")
-                        self._sleep(1, 2)
+                        self._do_sleep(1, 2)
                     except:
                         pass
             else:
-                print(f"    [!] 卡片索引超出范围，跳过", flush=True)
-            card_index += 1
+                print(f"    [!] 链接索引超出范围: {i} >= {len(link_elements)}，可能页面元素被移除", flush=True)
             if data:
                 results.append(data)
-            self._sleep(3, 8)
+            self._do_sleep(3, 8)
         return results
 
     # ------------------------------------------------------------------
@@ -407,7 +453,7 @@ class XHSScraper:
             page.wait_for_selector("#detail-title, .title, .note-content", timeout=10000)
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
-            self._sleep(1, 2)
+            self._do_sleep(1, 2)
         except PwTimeout:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
@@ -425,7 +471,7 @@ class XHSScraper:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
             page.wait_for_selector("#detail-title, .title, .note-content", timeout=10000)
-            self._sleep(1, 2)
+            self._do_sleep(1, 2)
         except PwTimeout:
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
@@ -459,9 +505,9 @@ class XHSScraper:
             "content":      content,
             "author":       author,
             "date":         date,
-            "likes":        likes,
-            "collects":     collects,
-            "comments_count": chat,
+            "likes":        self._parse_int(likes),
+            "collects":     self._parse_int(collects),
+            "comments_count": self._parse_int(chat),
             "comments":     comments,
         }
 
@@ -475,12 +521,23 @@ class XHSScraper:
     def _extract_comments(self, page: Page) -> list[str]:
         comments = []
         try:
+            # 等待评论区加载（功能性等待，极速模式下也需要）
+            try:
+                page.wait_for_selector(".comment-item", timeout=2000)
+            except PwTimeout:
+                # 可能真的没有评论，直接返回空
+                return comments
+
             # 展开更多评论（最多 2 次）
             for _ in range(2):
                 more = page.locator("text=展开更多评论")
                 if more.count() > 0 and more.first.is_visible():
                     more.first.click()
-                    self._sleep(1, 2)
+                    # 等待新评论加载（功能性等待，极速模式下也需要）
+                    try:
+                        page.wait_for_timeout(800)
+                    except Exception:
+                        pass
                 else:
                     break
 
@@ -513,6 +570,8 @@ if __name__ == "__main__":
                         help="跨调用去重文件路径（每行一个 note_id）")
     parser.add_argument("--hyperlinks", action="store_true",
                         help="启用超链接功能，生成 id_url_map.json")
+    parser.add_argument("--speed-mode", action="store_true",
+                        help="极速模式：去除所有随机延时，加速抓取（可能触发风控）")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
@@ -534,5 +593,6 @@ if __name__ == "__main__":
         search_strategy=search_strategy,
         seen_ids_path=args.seen_ids,
         hyperlinks=args.hyperlinks,
+        speed_mode=args.speed_mode,
     )
     scraper.run(keywords=kws, output_file=args.output)

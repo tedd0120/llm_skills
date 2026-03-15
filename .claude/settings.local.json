@@ -36,7 +36,8 @@
       "Bash(git push:*)",
       "WebSearch",
       "Bash(find \"E:\\\\git_repos\\\\llm_skills\" -type f -name \"*xiaohongshu*\" 2>/dev/null | head -20)",
-      "Bash(find \"E:\\\\git_repos\\\\llm_skills\" -type f \\\\\\( -name \"*.py\" -o -name \"*.js\" -o -name \"*.ts\" -o -name \"*.json\" \\\\\\) | xargs grep -l \"xiaohongshu\" 2>/dev/null)"
+      "Bash(find \"E:\\\\git_repos\\\\llm_skills\" -type f \\\\\\( -name \"*.py\" -o -name \"*.js\" -o -name \"*.ts\" -o -name \"*.json\" \\\\\\) | xargs grep -l \"xiaohongshu\" 2>/dev/null)",
+      "Bash(grep -c '\"comments_count\": \"评论\"' \"E:/git_repos/llm_skills/data/xiaohongshu/20260315_174949_洁厕灵推荐/raw.json\" 2>/dev/null || echo \"未找到\")"
     ]
   }
 }

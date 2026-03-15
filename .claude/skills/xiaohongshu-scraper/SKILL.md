@@ -86,7 +86,19 @@ metadata:
 
 等待用户回复，循环调整直到用户确认（"确认"、"开始"、"好的"、"就这样"等）。
 
-**第 4 轮：超链接格式选择**
+**第 4 轮：极速模式询问**
+```markdown
+是否启用极速模式？
+
+| 选项 | 模式 | 说明 |
+|:----:|:-----|:-----|
+| N | 正常模式（默认） | 内置随机延时，降低风控风险 |
+| Y | 极速模式 | 去除所有延时，快速抓取但可能触发风控 |
+
+回复 `Y` 或 `N`（默认 N）。
+```
+
+**第 5 轮：超链接格式选择**
 
 用户确认关键词后，询问超链接格式：
 
@@ -105,7 +117,8 @@ metadata:
 1. 模式选择确认
 2. 篇数上限询问
 3. 衍生结果展示 + 确认询问
-4. 超链接格式选择
+4. 极速模式询问
+5. 超链接格式选择
 
 #### 4. 模式 B（发散模式）: 逐轮交互序列
 
@@ -135,7 +148,19 @@ metadata:
 确认按该参数开始发散搜索吗？
 ```
 
-**第 5 轮：超链接格式选择**
+**第 5 轮：极速模式询问**
+```markdown
+是否启用极速模式？
+
+| 选项 | 模式 | 说明 |
+|:----:|:-----|:-----|
+| N | 正常模式（默认） | 内置随机延时，降低风控风险 |
+| Y | 极速模式 | 去除所有延时，快速抓取但可能触发风控 |
+
+回复 `Y` 或 `N`（默认 N）。
+```
+
+**第 6 轮：超链接格式选择**
 
 用户确认参数后，询问超链接格式：
 
@@ -155,7 +180,8 @@ metadata:
 2. 篇数上限询问
 3. 发散轮数询问
 4. 配额预览 + 确认询问
-5. 超链接格式选择
+5. 极速模式询问
+6. 超链接格式选择
 
 #### 5. 禁止合并问题
 
@@ -220,40 +246,38 @@ metadata:
 │  1. 澄清阶段（固定/发散模式）                                    │
 │     → 用户确认关键词或参数                                      │
 │     → 用户选择超链接格式                                        │
-│     → 创建 OUTPUT_DIR                                        │
+│     → 确定 OUTPUT_DIR 路径                                    │
 │       路径模板：data/xiaohongshu/YYYYMMDD_HHmmSS_主题/        │
 │                                                             │
-│  2. 创建任务清单                                               │
-│     → 写入 {OUTPUT_DIR}/tasks.md（5 项未勾选任务）             │
-│                                                             │
-│  3. 确保登录（编排脚本）                                        │
-│     → 调用 scripts/orchestrate_login.py                        │
+│  2. 确保登录（编排脚本）                                        │
+│     → 调用 scripts/orchestrate_login.py --output-dir <DIR>   │
+│     → 编排脚本自动创建目录和 tasks.md                           │
 │     → 由编排脚本后台管理 login_xhs.py 并按间隔轮询输出            │
 │     → LOGIN_EVENT / NEED_LOGIN:<abs_path>：立即提醒用户扫码       │
 │     → LOGIN_OK/LOGIN_SUCCESS：打勾 ✓ 继续执行                   │
 │     → LOGIN_TIMEOUT/LOGIN_FAILED：报错中止                      │
 │                                                             │
-│  4. 抓取数据 → xiaohongshu-fetch                             │
+│  3. 抓取数据 → xiaohongshu-fetch                             │
 │     → 固定模式：单次调用 → raw.json                            │
 │     → 发散模式：多轮循环 → 合并 → raw.json                      │
 │     → 生成 id_url_map.json                                   │
 │     → 打勾 ✓                                                 │
 │                                                             │
-│  5. 生成报告 → xiaohongshu-summarize                          │
+│  4. 生成报告 → xiaohongshu-summarize                          │
 │     → 阅读 SKILL.md 了解报告模板                               │
 │     → 读取 raw.json，生成 {主题}.md                           │
 │     → 打勾 ✓                                                 │
 │                                                             │
-│  6. 格式化报告 → xiaohongshu-formatter                        │
+│  5. 格式化报告 → xiaohongshu-formatter                        │
 │     → 阅读 SKILL.md 了解格式要求                               │
 │     → 增强 emoji，替换超链接占位符                              │
 │     → 打勾 ✓                                                 │
 │                                                             │
-│  7. 发送报告                                                  │
+│  6. 发送报告                                                  │
 │     → 将最终报告发送到用户对话框                                 │
 │     → 打勾 ✓                                                 │
 │                                                             │
-│  8. 验证任务完成                                               │
+│  7. 验证任务完成                                               │
 │     → 执行 scripts/verify_tasks.py                           │
 │     → 返回 TASKS_COMPLETE：成功结束                           │
 │     → 返回 TASKS_INCOMPLETE：报错中止                          │
@@ -271,20 +295,22 @@ scraper 通过以下参数在子 skills 间传递上下文：
 | `search_strategy` | array | 固定模式搜索策略 | fetch |
 | `divergence_params` | object | 发散模式参数配置 | fetch |
 | `hyperlinks` | boolean | 是否启用超链接功能 | fetch, summarize, formatter |
+| `speed_mode` | boolean | 是否启用极速模式 | fetch |
 
 #### 登录步骤执行模板（调用编排脚本）
 
 ```text
 1) 读取 LOGIN_POLL_INTERVAL_SEC（默认 2；非法值回退到 2）
-2) 调用：python .claude/skills/xiaohongshu-scraper/scripts/orchestrate_login.py --poll-interval <LOGIN_POLL_INTERVAL_SEC> --tasks-file <tasks_file_path>
+2) 调用：python .claude/skills/xiaohongshu-scraper/scripts/orchestrate_login.py --poll-interval <LOGIN_POLL_INTERVAL_SEC> --output-dir <OUTPUT_DIR>
+   - orchestrate_login.py 会自动创建目录和 tasks.md（如不存在）
 3) 监听 orchestrate_login.py 输出：
    - 原样透传 login_xhs.py 输出，保留 COOKIE_FINGERPRINT 等排障信息
    - 重点关注 LOGIN_EVENT: {...} 结构化事件
-4) 出现 NEED_LOGIN:<abs_path> 或 `LOGIN_EVENT: {"event": "NEED_LOGIN", ...}`：
+4) 出现 NEED_LOGIN:<abs_path> 或 `LOGIN_EVENT: {“event”: “NEED_LOGIN”, ...}`：
    - 立即向用户发送：
      “请扫码登录小红书。二维码文件：<abs_path>”
 5) 出现 LOGIN_OK / LOGIN_SUCCESS（或对应 LOGIN_EVENT）后：
-   - orchestrate_login.py 会负责将 tasks.md 中“确保登录”标记为完成
+   - orchestrate_login.py 会负责将 tasks.md 中”确保登录”标记为完成
    - 继续执行下一步
 6) 出现 LOGIN_TIMEOUT / LOGIN_FAILED / ORCHESTRATOR_ERROR 后：
    - 报错并中止执行阶段
@@ -356,23 +382,23 @@ scraper 通过以下参数在子 skills 间传递上下文：
 2. **[核心要求]** 澄清阶段必须先执行模式选择（A 固定关键词 / B 发散模式）
 3. **[核心要求]** 模式 A 必须衍生关键词并获得用户确认；模式 B 必须收集参数并获得用户确认
 4. **[核心要求]** 模式 B 必须展示每轮配额预览（余数加到第一轮）
-5. **[核心要求]** 用户确认后必须立即创建搜索目录，路径格式为 `data/xiaohongshu/YYYYMMDD_HHmmSS_主题/`
-6. **[核心要求]** 目录时间戳必须使用当前系统时间，禁止使用示例或虚构时间
-7. **[核心要求]** 进入阶段二后必须立即创建 `{OUTPUT_DIR}/tasks.md`，包含 5 项未勾选任务
-8. **[核心要求]** 每完成一项任务必须立即更新 tasks.md，将 `[ ]` 改为 `[x]`
-9. **[核心要求]** 确保登录步骤必须通过 `scripts/orchestrate_login.py` 执行：
-   - 必须调用 `scripts/orchestrate_login.py`，禁止让 Agent 自己手写后台轮询 `login_xhs.py`
+5. **[核心要求]** 输出目录路径格式为 `data/xiaohongshu/YYYYMMDD_HHmmSS_主题/`，时间戳必须使用当前系统时间
+6. **[核心要求]** 调用 `orchestrate_login.py` 时必须使用 `--output-dir` 参数，脚本会自动创建目录和 tasks.md
+7. **[核心要求]** 每完成一项任务必须立即更新 tasks.md，将 `[ ]` 改为 `[x]`
+8. **[核心要求]** 确保登录步骤必须通过 `scripts/orchestrate_login.py` 执行：
+   - 必须调用 `scripts/orchestrate_login.py --output-dir <OUTPUT_DIR>`，禁止让 Agent 自己手写后台轮询 `login_xhs.py`
+   - 编排脚本会自动创建输出目录和 tasks.md（如不存在）
    - 编排脚本必须按 `LOGIN_POLL_INTERVAL_SEC` 间隔轮询新增输出（默认 2 秒；非法值回退到 2 秒）
    - 检测到 `NEED_LOGIN:<abs_path>` 或对应 `LOGIN_EVENT` 时，必须立即提示用户扫码并展示二维码绝对路径
    - 检测到 `LOGIN_OK` 或 `LOGIN_SUCCESS` 后，才能打勾并进入下一步
    - 检测到 `LOGIN_TIMEOUT` 或 `LOGIN_FAILED` 时，必须报错中止，禁止继续抓取
-10. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
+9. **[核心要求]** 执行阶段必须按顺序完成所有步骤，禁止跳过任意步骤：
    - 确保登录 → 完成后台轮询收敛后打勾
    - 抓取数据 → 产出 `raw.json` 和 `id_url_map.json` 后打勾
    - 生成报告 → 阅读 `xiaohongshu-summarize/SKILL.md` 并产出 `{主题}.md` 后打勾
    - 格式化报告 → 阅读 `xiaohongshu-formatter/SKILL.md` 并更新 `{主题}.md` 后打勾
    - 发送报告 → 将最终报告发送到用户对话框后打勾
-11. **[核心要求]** 阶段结束前必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证
+10. **[核心要求]** 阶段结束前必须执行 `python scripts/verify_tasks.py <tasks_file_path>` 验证
     - 返回 `TASKS_COMPLETE`：成功结束
     - 返回 `TASKS_INCOMPLETE`：报错中止，禁止发送报告
 12. **[核心要求]** 澄清阶段必须逐轮发起问题交互：
@@ -386,6 +412,9 @@ scraper 通过以下参数在子 skills 间传递上下文：
     - 决策报告必须包含：本轮发现、下一关键词、衍生理由
     - 衍生理由必须包含"基于什么发现 → 衍生出此关键词"的因果链
     - 决策报告必须展示给用户
+15. **[核心要求]** 极速模式风险告知：
+    - 极速模式会去除所有随机延时，大幅增加被风控的风险
+    - 用户选择极速模式时，应提示风险并由用户自行承担可能的账号限制后果
 
 ---
 
