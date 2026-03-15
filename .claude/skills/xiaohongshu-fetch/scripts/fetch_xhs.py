@@ -182,6 +182,37 @@ class XHSScraper:
         except Exception:
             pass
 
+    def _handle_captcha_verification(self, page: Page) -> str | None:
+        """
+        处理风控验证码页面：
+        1. 等待二维码加载完成
+        2. 截图保存
+        3. 返回截图路径供用户扫码
+        """
+        captcha_screenshot = FETCH_SCRIPT_DIR / "xhs_captcha_qr.png"
+
+        try:
+            # 等待二维码图片加载完成（最长等待 10 秒）
+            page.wait_for_selector(S.QR_CODE_IMAGE, state="visible", timeout=10000)
+
+            # 额外等待确保图片完全渲染
+            page.wait_for_timeout(500)
+
+            # 截取二维码区域
+            qr_element = page.locator(S.QR_CODE_IMAGE)
+            if qr_element.count() > 0:
+                qr_element.first.screenshot(path=str(captcha_screenshot))
+            else:
+                page.screenshot(path=str(captcha_screenshot))
+
+            print(f"[✓] 验证码二维码已保存: {captcha_screenshot}", flush=True)
+            return str(captcha_screenshot)
+        except Exception as e:
+            # 降级：截图整个页面
+            print(f"[!] 二维码截图失败，降级截图整个页面: {e}", flush=True)
+            page.screenshot(path=str(captcha_screenshot))
+            return str(captcha_screenshot)
+
     # ------------------------------------------------------------------
     # 入口
     # ------------------------------------------------------------------
@@ -274,12 +305,61 @@ class XHSScraper:
                 print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
                 time.sleep(30)
             return True
+
+        # 2. 风控验证码页面检测（二次扫码验证）
+        if "website-login/captcha" in url_lower:
+            print(f"[!] 检测到风控验证码页面: {page.url}", flush=True)
+
+            # 等待并截取二维码
+            qr_path = self._handle_captcha_verification(page)
+
+            if qr_path:
+                # 输出标准事件，供编排层识别
+                print(f"NEED_CAPTCHA:{qr_path}", flush=True)
+
+            # 轮询等待用户扫码完成
+            print("[!] 请查看截图扫码验证，验证完成后将自动继续...", flush=True)
+            for i in range(60):  # 最长等待 180 秒
+                time.sleep(3)
+                current_url = page.url.lower()
+
+                # 检测1: URL 跳转到正常页面（搜索结果、帖子等）
+                if any(x in current_url for x in ["search_result", "/explore/", "/discovery/"]):
+                    print("[✓] 验证完成（URL跳转），继续抓取...", flush=True)
+                    return False
+
+                # 检测2: 离开 captcha 页面
+                if "captcha" not in current_url:
+                    print("[✓] 验证完成（离开captcha），继续抓取...", flush=True)
+                    return False
+
+                # 检测3: 二维码元素消失（扫码成功）
+                try:
+                    qr_element = page.locator(S.QR_CODE_IMAGE)
+                    if qr_element.count() == 0 or not qr_element.first.is_visible():
+                        print("[✓] 验证完成（二维码消失），继续抓取...", flush=True)
+                        # 等待页面跳转
+                        page.wait_for_timeout(1000)
+                        return False
+                except Exception:
+                    print("[✓] 验证完成（元素异常），继续抓取...", flush=True)
+                    return False
+
+            print("[✗] 验证超时", flush=True)
+            return True
+
         if "login" in url_lower:
             print(f"[!] 检测到登录页跳转: {page.url}", flush=True)
             self._save_debug_screenshot(page, "login_redirect")
-            if not self.speed_mode:
-                print("[!] 等待 30 秒，请查看浏览器页面...", flush=True)
-                time.sleep(30)
+            # 等待用户扫码验证
+            print("[!] 请在浏览器窗口中扫码验证，扫码完成后将自动继续...", flush=True)
+            # 等待最多 120 秒，每 3 秒检查一次是否已离开登录页
+            for _ in range(40):
+                time.sleep(3)
+                if "login" not in page.url.lower():
+                    print("[✓] 验证完成，继续抓取...", flush=True)
+                    return False
+            print("[✗] 验证超时", flush=True)
             return True
 
         try:
@@ -359,90 +439,92 @@ class XHSScraper:
 
         self._do_sleep(2, 4)
 
-        # 收集帖子链接 — 滚动加载瀑布流以获取更多结果
-        hrefs = []
-        max_scroll_rounds = 10  # 最多滚动 10 轮，防止无限循环
-        prev_count = 0
-        for scroll_round in range(max_scroll_rounds):
+        # 边滚动边点击策略：解决虚拟滚动导致元素不在 DOM 中的问题
+        # 关键：每次只处理一个帖子，然后重新获取当前可见元素
+        results = []
+        processed_ids = set()  # 本次搜索已处理的 note_id（用于去重）
+        consecutive_empty_scrolls = 0  # 连续无新内容的滚动次数
+        max_empty_scrolls = 3  # 连续 3 次无新内容则停止
+
+        print(f"  开始边滚动边抓取，目标 {limit} 篇", flush=True)
+
+        while len(results) < limit:
+            # 每次只获取一个未处理的帖子（确保元素在 DOM 中）
             link_els = page.locator(S.POST_LINK).all()
+            target_el = None
+            target_note_id = None
+            target_url = None
+
             for el in link_els:
                 href = el.get_attribute("href")
                 if not href:
                     continue
-                full = ("https://www.xiaohongshu.com" + href) if href.startswith("/") else href
                 note_id = href.split("/")[-1].split("?")[0]
-                if note_id not in seen:
-                    seen.add(note_id)
-                    new_seen_ids.add(note_id)
-                    hrefs.append(full)
+                # 找到第一个未处理的帖子
+                if note_id not in processed_ids and note_id not in seen:
+                    full_url = ("https://www.xiaohongshu.com" + href) if href.startswith("/") else href
+                    target_el = el
+                    target_note_id = note_id
+                    target_url = full_url
+                    break
 
-            # 已经收集到足够的链接，停止滚动
-            if len(hrefs) >= limit:
-                break
+            # 如果没有找到未处理的帖子，滚动加载更多
+            if target_el is None:
+                consecutive_empty_scrolls += 1
+                if consecutive_empty_scrolls >= max_empty_scrolls:
+                    print(f"  连续 {max_empty_scrolls} 次无新内容，停止抓取", flush=True)
+                    break
+                # 滚动尝试加载更多
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                time.sleep(2)  # 瀑布流加载必须等待
+                continue
+            else:
+                consecutive_empty_scrolls = 0  # 有新内容，重置计数器
 
-            # 如果这一轮没有新链接出现，说明已到底部
-            if len(hrefs) == prev_count:
-                break
-            prev_count = len(hrefs)
+            # 处理这一个帖子
+            print(f"  [{len(results)+1}/{limit}] {target_url[:60]}…", flush=True)
 
-            # 向下滚动触发瀑布流加载
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            self._do_sleep(2, 4)
+            try:
+                # 滚动到元素可见并点击
+                target_el.scroll_into_view_if_needed()
+                self._do_sleep(0.3, 0.8)
+                target_el.click()
 
-        print(f"  找到 {len(hrefs)} 篇（去重后），抓前 {limit} 篇", flush=True)
+                # 提取帖子数据
+                data = self._extract_post_after_click(page, target_url)
 
-        # 回到搜索结果页顶部，准备点击抓取
-        page.evaluate("window.scrollTo(0, 0)")
-        self._do_sleep(1, 2)
+                # 关闭详情页返回搜索结果
+                close_btn = page.locator(S.CLOSE_BUTTON)
+                if close_btn.count() > 0:
+                    close_btn.first.click()
+                else:
+                    page.keyboard.press("Escape")
+                self._do_sleep(0.5, 1.5)
 
-        results = []
-        scroll_y = 0  # 当前滚动位置
-        for i, post_url in enumerate(hrefs[:limit]):
-            print(f"  [{i+1}/{min(limit,len(hrefs))}] {post_url[:80]}…", flush=True)
+                if data:
+                    results.append(data)
+                    processed_ids.add(target_note_id)
+                    new_seen_ids.add(target_note_id)
+                    seen.add(target_note_id)
+                else:
+                    # 提取失败也标记为已处理，避免重复尝试
+                    processed_ids.add(target_note_id)
 
-            # 使用 POST_LINK 直接点击，保持与收集链接时的选择器一致
-            data = None
-            link_elements = page.locator(S.POST_LINK).all()
-
-            # 如果索引超出范围，尝试向下滚动触发虚拟渲染
-            max_scroll_retry = 3
-            retry = 0
-            while i >= len(link_elements) and retry < max_scroll_retry:
-                scroll_y += 500
-                page.evaluate(f"window.scrollTo(0, {scroll_y})")
-                self._do_sleep(1, 2)
-                link_elements = page.locator(S.POST_LINK).all()
-                retry += 1
-                print(f"    [*] 滚动加载更多元素 (y={scroll_y}, retry={retry})", flush=True)
-
-            if i < len(link_elements):
+            except Exception as e:
+                print(f"    [!] 点击操作失败: {e}", flush=True)
+                self._save_debug_screenshot(page, f"click_fail_{len(results)}")
+                processed_ids.add(target_note_id)  # 标记为已处理
+                # 尝试关闭弹窗
                 try:
-                    link_elements[i].scroll_into_view_if_needed()
-                    self._do_sleep(0.5, 1)
-                    link_elements[i].click()
-                    data = self._extract_post_after_click(page, post_url)
-                    # 点击关闭按钮返回搜索页（而非 go_back）
                     close_btn = page.locator(S.CLOSE_BUTTON)
                     if close_btn.count() > 0:
                         close_btn.first.click()
-                    else:
-                        # 回退：按 ESC 键
-                        page.keyboard.press("Escape")
-                    self._do_sleep(1, 2)
-                except Exception as e:
-                    print(f"    [!] 点击操作失败: {e}", flush=True)
-                    self._save_debug_screenshot(page, f"click_fail_{i}")
-                    # 尝试按 ESC 返回
-                    try:
-                        page.keyboard.press("Escape")
-                        self._do_sleep(1, 2)
-                    except:
-                        pass
-            else:
-                print(f"    [!] 链接索引超出范围: {i} >= {len(link_elements)}，可能页面元素被移除", flush=True)
-            if data:
-                results.append(data)
-            self._do_sleep(3, 8)
+                except:
+                    pass
+
+            self._do_sleep(2, 5)
+
+        print(f"  抓取完成: {len(results)} 篇", flush=True)
         return results
 
     # ------------------------------------------------------------------
