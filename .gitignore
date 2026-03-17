@@ -1,5 +1,6 @@
 # Environment variables
 .env
+settings.local.json
 
 # Python
 __pycache__/

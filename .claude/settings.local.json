@@ -38,7 +38,8 @@
       "Bash(find \"E:\\\\git_repos\\\\llm_skills\" -type f -name \"*xiaohongshu*\" 2>/dev/null | head -20)",
       "Bash(find \"E:\\\\git_repos\\\\llm_skills\" -type f \\\\\\( -name \"*.py\" -o -name \"*.js\" -o -name \"*.ts\" -o -name \"*.json\" \\\\\\) | xargs grep -l \"xiaohongshu\" 2>/dev/null)",
       "Bash(grep -c '\"comments_count\": \"评论\"' \"E:/git_repos/llm_skills/data/xiaohongshu/20260315_174949_洁厕灵推荐/raw.json\" 2>/dev/null || echo \"未找到\")",
-      "Bash(ls -la \"E:\\\\git_repos\\\\llm_skills\\\\.claude\\\\skills\\\\xiaohongshu-fetch\\\\scripts\\\\xhs_captcha_qr.png\" 2>/dev/null || dir \"E:\\\\git_repos\\\\llm_skills\\\\.claude\\\\skills\\\\xiaohongshu-fetch\\\\scripts\\\\xhs_captcha_qr.png\")"
+      "Bash(ls -la \"E:\\\\git_repos\\\\llm_skills\\\\.claude\\\\skills\\\\xiaohongshu-fetch\\\\scripts\\\\xhs_captcha_qr.png\" 2>/dev/null || dir \"E:\\\\git_repos\\\\llm_skills\\\\.claude\\\\skills\\\\xiaohongshu-fetch\\\\scripts\\\\xhs_captcha_qr.png\")",
+      "Bash(OUTPUT_DIR=\"P:/git_repos/llm_skills/data/xiaohongsho/20260317_173416_20L-25L双肩包推荐\")"
     ]
   }
 }
