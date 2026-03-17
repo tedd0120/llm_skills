@@ -56,20 +56,3 @@
 ├── teams-attendance/       # 考勤自动化技能
 ├── teams-group-members/    # 群组成员与组织树技能
 └── xiaohongshu-*/          # 小红书技能集（scraper, fetch, summarize, formatter）
-
-data/                       # 本地数据存储目录（已添加至 .gitignore）
-openspec/                   # 开放规范文档
-```
-
-## ⚙️ 环境配置
-
-复制 `.env.example` 为 `.env` 并填写必要的配置项：
-
-```bash
-cp .env.example .env
-```
-
-详见 `.env.example` 文件中的配置说明。
-
-其中小红书 skill 的登录 Cookie 路径现已固定为 `.claude/skills/xiaohongshu-scraper/scripts/xhs_auth.json`，由 skill 内部基于脚本位置自动定位，不再依赖 `.env` 中的 `XHS_AUTH_STATE` 配置。
-登录脚本与抓取脚本都会输出同口径的 Cookie 指纹（绝对路径、mtime、size、sha256），用于确认两者读写的是同一份 Cookie 文件。
