@@ -248,20 +248,33 @@ class XHSScraper:
             page = ctx.new_page()
             Stealth().apply_stealth_sync(page)
 
-            # 1) 搜索 + 抓取（均分 + 回收策略）
+            # 1) 搜索 + 抓取（strategy 优先，回收策略兜底）
             all_posts = []
             seen = self._load_seen_ids()
             new_seen_ids = set()
             remaining_total = self.max_posts
 
+            # 构建 keyword→limit 映射（从 search_strategy）
+            strategy_limits = {}
+            if self.search_strategy:
+                for item in self.search_strategy:
+                    kw = item.get("keyword", "")
+                    limit = item.get("limit") or item.get("posts_count") or item.get("count")
+                    if kw and limit:
+                        strategy_limits[kw] = int(limit)
+
             try:
                 for idx, kw in enumerate(keywords):
                     if remaining_total <= 0:
                         break
-                    remaining_kws = len(keywords) - idx
-                    quota = remaining_total // remaining_kws  # 均分
-                    if remaining_total % remaining_kws != 0:
-                        quota += 1  # 余数给当前关键词多 1 篇
+                    # 优先使用 strategy 配置的 limit，否则均分
+                    if kw in strategy_limits:
+                        quota = min(strategy_limits[kw], remaining_total)
+                    else:
+                        remaining_kws = len(keywords) - idx
+                        quota = remaining_total // remaining_kws
+                        if remaining_total % remaining_kws != 0:
+                            quota += 1
                     print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})", flush=True)
                     try:
                         posts = self._search_keyword(page, kw, quota, seen, new_seen_ids)
