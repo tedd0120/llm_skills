@@ -225,7 +225,8 @@ def parsed_att_date(check_month: str, em_code: Optional[str] = None, authorizati
         '备注2': d['resultList'][0] if d['resultList'] else None
     } for d in data])
 
-    att_df = att_df[att_df['月份'] == check_month].drop_duplicates().reset_index(drop=True)
+    # 按日期去重，保留第一条记录（同一日期可能有多条备注记录）
+    att_df = att_df[att_df['月份'] == check_month].drop_duplicates(subset=['日期']).reset_index(drop=True)
 
     att_df['工时'] = (pd.to_datetime(att_df['下班打卡']) - pd.to_datetime(att_df['上班打卡'])).dt.total_seconds() / 3600
     att_df.loc[att_df['假期flag'] != 0, '工时'] = 0
