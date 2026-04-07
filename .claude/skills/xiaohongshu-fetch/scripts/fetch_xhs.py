@@ -69,6 +69,7 @@ class XHSScraper:
         search_strategy: list = None,
         seen_ids_path: str = "",
         hyperlinks: bool = False,
+        safe_mode: bool = False,
         speed_mode: bool = False,
     ):
         # 强制有头模式：在无 DISPLAY 时报错退出
@@ -83,8 +84,15 @@ class XHSScraper:
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
         self.hyperlinks = hyperlinks
+        self.safe_mode = safe_mode
         self.speed_mode = speed_mode
         self.auth_state_path = AUTH_STATE_PATH
+
+        # 启动模式横幅
+        if self.speed_mode:
+            print("[⚡] 极速模式 — 已去除所有延时", flush=True)
+        elif self.safe_mode:
+            print("[🛡️] 安全模式 — 延迟增大，模拟人类阅读节奏", flush=True)
 
     # ------------------------------------------------------------------
     # helpers
@@ -95,8 +103,18 @@ class XHSScraper:
         time.sleep(random.uniform(lo, hi))
 
     def _do_sleep(self, lo=3, hi=8):
-        """实例方法：极速模式下跳过延时"""
-        if not self.speed_mode:
+        """实例方法：极速模式跳过，安全模式增大延迟+阅读停顿"""
+        if self.speed_mode:
+            return
+        if self.safe_mode:
+            lo_safe = lo * 2.5
+            hi_safe = hi * 2.5 + random.uniform(0, 2)
+            time.sleep(random.uniform(lo_safe, hi_safe))
+            if random.random() < 0.10:
+                reading_pause = random.uniform(5, 15)
+                print(f"    [safe-mode] reading pause {reading_pause:.1f}s", flush=True)
+                time.sleep(reading_pause)
+        else:
             time.sleep(random.uniform(lo, hi))
 
     def _print_cookie_fingerprint(self, stage: str):
@@ -489,7 +507,12 @@ class XHSScraper:
                     break
                 # 滚动尝试加载更多
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                time.sleep(2)  # 瀑布流加载必须等待
+                if self.speed_mode:
+                    time.sleep(1)
+                elif self.safe_mode:
+                    time.sleep(random.uniform(4, 7))
+                else:
+                    time.sleep(2)
                 continue
             else:
                 consecutive_empty_scrolls = 0  # 有新内容，重置计数器
@@ -665,6 +688,8 @@ if __name__ == "__main__":
                         help="跨调用去重文件路径（每行一个 note_id）")
     parser.add_argument("--hyperlinks", action="store_true",
                         help="启用超链接功能，生成 id_url_map.json")
+    parser.add_argument("--safe-mode", action="store_true",
+                        help="安全模式：延迟增大 2.5-3x + 随机阅读停顿，降低风控风险")
     parser.add_argument("--speed-mode", action="store_true",
                         help="极速模式：去除所有随机延时，加速抓取（可能触发风控）")
 
@@ -688,6 +713,7 @@ if __name__ == "__main__":
         search_strategy=search_strategy,
         seen_ids_path=args.seen_ids,
         hyperlinks=args.hyperlinks,
+        safe_mode=args.safe_mode,
         speed_mode=args.speed_mode,
     )
     scraper.run(keywords=kws, output_file=args.output)

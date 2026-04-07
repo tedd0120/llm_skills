@@ -33,6 +33,8 @@ metadata:
 | `--output` | ✅ | 输出文件路径（如 `data/xiaohongshu/.../raw.json`）|
 | `--search-strategy` | ❌ | 搜索策略 JSON（固定模式使用）|
 | `--seen-ids` | ❌ | 已见 ID 文件路径（发散模式去重使用）|
+| `--safe-mode` | ❌ | 安全模式：延迟增大 2.5-3x + 随机阅读停顿 |
+| `--speed-mode` | ❌ | 极速模式：去除所有延时（优先级高于 safe-mode）|
 
 ---
 
@@ -59,6 +61,16 @@ python .claude/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
   --output "data/xiaohongshu/YYYYMMDD_HHmmSS_主题/raw_round_1.json" \
   --seen-ids "data/xiaohongshu/YYYYMMDD_HHmmSS_主题/seen_ids.txt"
 ```
+
+---
+
+## 速度模式
+
+| 模式 | 参数 | 行为 |
+|------|------|------|
+| 安全模式 | `--safe-mode` | 延迟增大 2.5-3x + 10% 概率随机阅读停顿(5-15s) |
+| 正常模式 | (默认) | 内置随机延时，平衡速度与安全 |
+| 极速模式 | `--speed-mode` | 跳过所有延迟（优先级高于 safe-mode） |
 
 ---
 
