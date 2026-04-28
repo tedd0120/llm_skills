@@ -81,7 +81,7 @@ def print_statistics(today: str, att_df: pd.DataFrame, check_month: str) -> None
         print(f"  剩余工作日       {remaining_days} 天")
         print()
         # 硬编码目标工时
-        targets = [10.0, 10.5, 11.0]
+        targets = [10.5, 10.7, 11.0]
         total_work_days = worked_days + remaining_days
 
         print("┌────────────┬──────────────┐")
