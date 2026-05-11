@@ -1,10 +1,6 @@
 ---
 name: xiaohongshu-summarize
-description: 小红书数据分析报告生成组件
-license: MIT
-metadata:
-  author: llm-skills
-  version: "1.0"
+description: 小红书数据分析报告生成组件（内部，仅 scraper 调用）。读取 raw.json，生成结构化 Markdown 报告。
 ---
 
 # 小红书报告生成组件

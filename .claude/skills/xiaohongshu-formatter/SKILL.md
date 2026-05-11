@@ -1,3 +1,8 @@
+---
+name: xiaohongshu-formatter
+description: 小红书报告格式化组件（内部，仅 scraper 调用）。对 {主题}.md 草稿进行后处理：增强 emoji、替换超链接占位符、清理格式标记。
+---
+
 # 小红书报告格式化 Skill
 
 对现有 `{主题}.md` 报告进行后处理，增强 emoji 使用，提升报告的趣味性和可读性。

@@ -1,10 +1,6 @@
 ---
 name: xiaohongshu-fetch
 description: 小红书数据抓取组件（内部，仅 scraper 调用）
-license: MIT
-metadata:
-  author: llm-skills
-  version: "1.0"
 ---
 
 # 小红书数据抓取组件
