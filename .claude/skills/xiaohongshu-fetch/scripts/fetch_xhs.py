@@ -12,6 +12,7 @@ import time
 import random
 import argparse
 import hashlib
+import signal
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -239,7 +240,6 @@ class XHSScraper:
             launch_kw = {"headless": False}
             if sys.platform == 'win32':
                 launch_kw["channel"] = "msedge"
-                launch_kw["args"] = ["--window-position=-2400,-2400"]
 
             browser = pw.chromium.launch(**launch_kw)
 
@@ -270,6 +270,14 @@ class XHSScraper:
             all_posts = []
             seen = self._load_seen_ids()
             new_seen_ids = set()
+
+            # SIGTERM 处理器：TaskStop 时尽量保存已抓取数据
+            def _on_sigterm(signum, frame):
+                if all_posts and output_file:
+                    self._save_results(all_posts, output_file, keywords)
+                    self._append_seen_ids(new_seen_ids)
+                sys.exit(0)
+            signal.signal(signal.SIGTERM, _on_sigterm)
             remaining_total = self.max_posts
 
             # 构建 keyword→limit 映射（从 search_strategy）
@@ -298,9 +306,17 @@ class XHSScraper:
                         posts = self._search_keyword(page, kw, quota, seen, new_seen_ids)
                         all_posts.extend(posts)
                         remaining_total -= len(posts)  # 回收：实际抓到的扣减，未用完的自动流入后续
+                        # 每个关键词完成后立即写入检查点，防止中途终止丢失数据
+                        if all_posts and output_file:
+                            self._save_results(all_posts, output_file, keywords)
+                            self._append_seen_ids(new_seen_ids)
                     except Exception as e:
                         print(f"[!] 关键词 '{kw}' 抓取失败: {e}", flush=True)
                         self._save_debug_screenshot(page, f"keyword_error_{kw[:10]}")
+                        # 异常时也保存已有数据
+                        if all_posts and output_file:
+                            self._save_results(all_posts, output_file, keywords)
+                            self._append_seen_ids(new_seen_ids)
                         continue  # 继续下一个关键词
             finally:
                 # 无论是否异常，都保存已抓取的数据
