@@ -45,3 +45,9 @@ data/
 
 # Xiaohongshu auth state
 xhs_auth.json
+
+# Ctrip auth state (huazhu-crowd-index)
+ctrip_auth.json
+ctrip_debug_*.png
+ctrip_login.png
+_cal_*.png
