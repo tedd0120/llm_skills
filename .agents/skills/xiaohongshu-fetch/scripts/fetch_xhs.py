@@ -81,7 +81,7 @@ class XHSScraper:
             print("    export DISPLAY=:99", file=sys.stderr, flush=True)
             sys.exit(1)
 
-        self.max_posts = min(max_posts, 100)  # 硬上限 100
+        self.max_posts = max_posts  # 无上限
         self.search_strategy = search_strategy if search_strategy is not None else []
         self.seen_ids_path = Path(seen_ids_path) if seen_ids_path else None
         self.hyperlinks = hyperlinks
@@ -235,38 +235,46 @@ class XHSScraper:
     # ------------------------------------------------------------------
     # 入口
     # ------------------------------------------------------------------
+    def _launch_browser(self, pw):
+        """启动一个全新的浏览器实例，加载 Cookie，返回 (browser, ctx, page)。
+
+        每个关键词都重新调用，确保搜索下一个关键词时是干净的新页面，
+        避免同一页面连续搜索多个关键词触发风控。
+        """
+        launch_kw = {"headless": False}
+        if sys.platform == 'win32':
+            launch_kw["channel"] = "msedge"
+
+        browser = pw.chromium.launch(**launch_kw)
+
+        ctx_kw = {
+            "viewport": {"width": 1280, "height": 800},
+            "locale": "zh-CN",
+            "timezone_id": "Asia/Shanghai",
+        }
+
+        # Cookie
+        ctx = None
+        fingerprint = self._print_cookie_fingerprint("fetch-before-load")
+        if self.auth_state_path.exists():
+            try:
+                ctx = browser.new_context(storage_state=str(self.auth_state_path), **ctx_kw)
+                print(f"[*] Cookie 已加载: {self.auth_state_path}", flush=True)
+            except Exception as e:
+                print(f"[!] Cookie 加载失败: {e}", flush=True)
+        else:
+            print(f"[!] Cookie 文件不存在: {fingerprint['path']}", flush=True)
+        if ctx is None:
+            ctx = browser.new_context(**ctx_kw)
+
+        page = ctx.new_page()
+        Stealth().apply_stealth_sync(page)
+        return browser, ctx, page
+
     def run(self, keywords: list, output_file: str = ""):
         with sync_playwright() as pw:
-            launch_kw = {"headless": False}
-            if sys.platform == 'win32':
-                launch_kw["channel"] = "msedge"
-
-            browser = pw.chromium.launch(**launch_kw)
-
-            ctx_kw = {
-                "viewport": {"width": 1280, "height": 800},
-                "locale": "zh-CN",
-                "timezone_id": "Asia/Shanghai",
-            }
-
-            # Cookie
-            ctx = None
-            fingerprint = self._print_cookie_fingerprint("fetch-before-load")
-            if self.auth_state_path.exists():
-                try:
-                    ctx = browser.new_context(storage_state=str(self.auth_state_path), **ctx_kw)
-                    print(f"[*] Cookie 已加载: {self.auth_state_path}", flush=True)
-                except Exception as e:
-                    print(f"[!] Cookie 加载失败: {e}", flush=True)
-            else:
-                print(f"[!] Cookie 文件不存在: {fingerprint['path']}", flush=True)
-            if ctx is None:
-                ctx = browser.new_context(**ctx_kw)
-
-            page = ctx.new_page()
-            Stealth().apply_stealth_sync(page)
-
             # 1) 搜索 + 抓取（strategy 优先，回收策略兜底）
+            #    每个关键词独立开关浏览器，规避同页连续搜索触发的风控
             all_posts = []
             seen = self._load_seen_ids()
             new_seen_ids = set()
@@ -301,7 +309,17 @@ class XHSScraper:
                         quota = remaining_total // remaining_kws
                         if remaining_total % remaining_kws != 0:
                             quota += 1
+
+                    # 第二个及以后的关键词：先停顿再重开浏览器，模拟人类换词节奏
+                    if idx > 0 and not self.speed_mode:
+                        gap = random.uniform(8, 18) if self.safe_mode else random.uniform(3, 8)
+                        print(f"[*] 切换关键词前停顿 {gap:.1f}s 并重开浏览器...", flush=True)
+                        time.sleep(gap)
+
                     print(f"\n[*] 搜索关键词: {kw}  (配额 {quota}, 总剩余 {remaining_total})", flush=True)
+
+                    # 为每个关键词重新打开一个干净的浏览器
+                    browser, ctx, page = self._launch_browser(pw)
                     try:
                         posts = self._search_keyword(page, kw, quota, seen, new_seen_ids)
                         all_posts.extend(posts)
@@ -318,6 +336,16 @@ class XHSScraper:
                             self._save_results(all_posts, output_file, keywords)
                             self._append_seen_ids(new_seen_ids)
                         continue  # 继续下一个关键词
+                    finally:
+                        # 搜完一个关键词立即关闭浏览器，下个关键词重新打开
+                        try:
+                            ctx.close()
+                        except Exception:
+                            pass
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
             finally:
                 # 无论是否异常，都保存已抓取的数据
                 if all_posts:
@@ -325,9 +353,6 @@ class XHSScraper:
                     self._append_seen_ids(new_seen_ids)
                 elif output_file:
                     print(f"\n[!] 未抓取到任何帖子", flush=True)
-
-            ctx.close()
-            browser.close()
 
     def _is_not_logged_in(self, page: Page) -> bool:
         """
@@ -695,7 +720,7 @@ if __name__ == "__main__":
     parser.add_argument("--keywords", required=True,
                         help="搜索关键词，多个用逗号分隔")
     parser.add_argument("--max-posts", type=int, required=True,
-                        help="最多抓取帖子数 (上限 100)")
+                        help="最多抓取帖子数 (无上限)")
     parser.add_argument("--output", default="",
                         help="JSON 输出文件路径")
     parser.add_argument("--search-strategy", default="",

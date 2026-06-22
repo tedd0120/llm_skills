@@ -25,7 +25,7 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 | 参数 | 必填 | 说明 |
 |------|:----:|------|
 | `--keywords` | ✅ | 搜索关键词，多个关键词用逗号分隔 |
-| `--max-posts` | ✅ | 帖子上限（硬上限 100）|
+| `--max-posts` | ✅ | 帖子上限（无上限，默认 100）|
 | `--output` | ✅ | 输出文件路径（如 `data/xiaohongshu/.../raw.json`）|
 | `--search-strategy` | ❌ | 搜索策略 JSON（固定模式使用）|
 | `--seen-ids` | ❌ | 已见 ID 文件路径（发散模式去重使用）|
