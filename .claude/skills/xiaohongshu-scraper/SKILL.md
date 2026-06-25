@@ -447,6 +447,10 @@ pip install -r .claude/skills/xiaohongshu-scraper/scripts/requirements.txt
 
 脚本会优先使用系统 Edge (`channel="msedge"`) 以减少风控特征。
 
+### 浏览器最小化
+
+登录和抓取时的浏览器默认以最小化模式启动（`--start-minimized`），不会抢占前台焦点。
+
 ### Linux 无屏幕环境配置（Xvfb 虚拟显示器）⚠️ 必须
 
 **[核心要求]** 在 Linux/WSL 服务器（无物理显示器）上运行时，必须使用 Xvfb 创建虚拟屏幕。脚本强制使用有头模式以确保登录成功率，无 `DISPLAY` 环境变量时将报错退出。

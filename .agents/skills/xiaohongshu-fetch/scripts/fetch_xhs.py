@@ -241,7 +241,7 @@ class XHSScraper:
         每个关键词都重新调用，确保搜索下一个关键词时是干净的新页面，
         避免同一页面连续搜索多个关键词触发风控。
         """
-        launch_kw = {"headless": False}
+        launch_kw = {"headless": False, "args": ["--start-minimized"]}
         if sys.platform == 'win32':
             launch_kw["channel"] = "msedge"
 

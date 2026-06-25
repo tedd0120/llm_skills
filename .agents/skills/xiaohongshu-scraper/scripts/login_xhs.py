@@ -131,7 +131,7 @@ class XHSLogin:
 
     def run(self, check_only: bool, timeout: int) -> int:
         with sync_playwright() as pw:
-            launch_kw = {"headless": False}
+            launch_kw = {"headless": False, "args": ["--start-minimized"]}
             if sys.platform == "win32":
                 launch_kw["channel"] = "msedge"
 
