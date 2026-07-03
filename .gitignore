@@ -1,3 +1,6 @@
+# Claude Code local config (skills is a junction to .agents/skills)
+.claude/
+
 # Environment variables
 .env
 settings.local.json
