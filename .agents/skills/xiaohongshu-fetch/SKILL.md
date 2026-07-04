@@ -7,18 +7,7 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 
 > ⚠️ **内部组件** — 本组件仅由 `xiaohongshu-scraper` 内部调用，**禁止用户单独调用**。
 
-通过自动化浏览器（Playwright）抓取小红书上的帖子正文和评论区内容，输出为 raw.json 文件。
-
----
-
-## 功能
-
-- 接收明确的搜索参数执行抓取
-- 支持固定关键词模式和发散模式单轮抓取
-- 输出标准格式的 JSON 数据文件
-- 支持跨轮去重（通过 `--seen-ids` 参数）
-
----
+通过自动化浏览器（Playwright）抓取小红书上的帖子正文和评论区内容，输出为 raw.json 文件。支持固定关键词模式和发散模式单轮抓取，支持跨轮去重。
 
 ## 参数
 
@@ -26,13 +15,13 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 |------|:----:|------|
 | `--keywords` | ✅ | 搜索关键词，多个关键词用逗号分隔 |
 | `--max-posts` | ✅ | 帖子上限（无上限，默认 100）|
-| `--output` | ✅ | 输出文件路径（如 `data/xiaohongshu/.../raw.json`）|
+| `--output` | ✅ | 输出文件**绝对路径**（`{OUTPUT_DIR}/raw.json`；OUTPUT_DIR 约定见 scraper 的 SKILL.md，禁止写入 skill 目录）|
 | `--search-strategy` | ❌ | 搜索策略 JSON（固定模式使用）|
-| `--seen-ids` | ❌ | 已见 ID 文件路径（发散模式去重使用）|
-| `--safe-mode` | ❌ | 安全模式：延迟增大 2.5-3x + 随机阅读停顿 |
-| `--speed-mode` | ❌ | 极速模式：去除所有延时（优先级高于 safe-mode）|
+| `--seen-ids` | ❌ | 已见 ID 文件路径（发散模式跨轮去重）|
+| `--safe-mode` | ❌ | 安全模式：延迟增大 2.5-3x + 10% 概率随机阅读停顿（5-15s），适用于曾被风控拦截的场景 |
+| `--speed-mode` | ❌ | 极速模式：去除所有延时，风控风险显著上升。与 `--safe-mode` 互斥，同时传入时 `--speed-mode` 优先 |
 
----
+不传速度参数时为正常模式：内置随机延时，平衡速度与安全。**本表是速度模式语义的唯一定义**。
 
 ## 使用方式
 
@@ -41,34 +30,22 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 ### 固定关键词模式
 
 ```bash
-python .claude/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
+python .agents/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
   --keywords "关键词1,关键词2,关键词3" \
   --max-posts 30 \
   --search-strategy '[{"keyword":"关键词1","posts_count":10,"intent":"获取整体推荐趋势"}]' \
-  --output "data/xiaohongshu/YYYYMMDD_HHmmSS_主题/raw.json"
+  --output "<OUTPUT_DIR>/raw.json"
 ```
 
 ### 发散模式单轮
 
 ```bash
-python .claude/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
+python .agents/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
   --keywords "本轮关键词" \
   --max-posts 10 \
-  --output "data/xiaohongshu/YYYYMMDD_HHmmSS_主题/raw_round_1.json" \
-  --seen-ids "data/xiaohongshu/YYYYMMDD_HHmmSS_主题/seen_ids.txt"
+  --output "<OUTPUT_DIR>/raw_round_1.json" \
+  --seen-ids "<OUTPUT_DIR>/seen_ids.txt"
 ```
-
----
-
-## 速度模式
-
-| 模式 | 参数 | 行为 |
-|------|------|------|
-| 安全模式 | `--safe-mode` | 延迟增大 2.5-3x + 10% 概率随机阅读停顿(5-15s) |
-| 正常模式 | (默认) | 内置随机延时，平衡速度与安全 |
-| 极速模式 | `--speed-mode` | 跳过所有延迟（优先级高于 safe-mode） |
-
----
 
 ## 输出格式
 

@@ -54,3 +54,7 @@ ctrip_auth.json
 ctrip_debug_*.png
 ctrip_login.png
 _cal_*.png
+
+# pan123-renamer
+.token_cache.json
+.agents/skills/pan123-renamer/scripts/output/
