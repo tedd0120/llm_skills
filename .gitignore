@@ -1,6 +1,9 @@
 # Claude Code local config (skills is a junction to .agents/skills)
 .claude/
 
+# ZCode local config (contains plaintext secrets like TAVILY_API_KEY)
+.zcode/
+
 # Environment variables
 .env
 settings.local.json
