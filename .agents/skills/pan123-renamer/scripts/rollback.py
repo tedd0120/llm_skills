@@ -7,6 +7,7 @@
 - rename → 改回原名
 - move   → 移回原目录（需日志中有 fromParentId，方案条目里带 oldParentId 才会记录）
 - mkdir  → 不删除（新建的目录留空即可，避免误删）
+- trash  → 从回收站恢复（apply.py 默认清理旧空目录时会记录此项）
 """
 import argparse
 import json
@@ -43,6 +44,11 @@ def main():
                 print(f"移回：[{rec['fileId']}] → {rec.get('fromParentPath')}")
                 if not args.dry_run:
                     c.move(rec["fileId"], rec["fromParentId"])
+                ok += 1
+            elif act == "trash":
+                print(f"恢复目录：[{rec['fileId']}] {rec.get('path')}")
+                if not args.dry_run:
+                    c.recover(rec["fileId"])
                 ok += 1
             else:
                 skipped += 1

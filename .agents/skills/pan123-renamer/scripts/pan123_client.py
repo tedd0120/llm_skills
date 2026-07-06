@@ -32,6 +32,7 @@ QPS = {
     "/api/v1/file/move": 1,
     "/upload/v1/file/mkdir": 2,
     "/api/v1/file/trash": 2,
+    "/api/v1/file/recover": 2,
 }
 
 
@@ -147,6 +148,18 @@ class Pan123Client:
             file_ids = [file_ids]
         self.request("POST", "/api/v1/file/move",
                      json={"fileIDs": file_ids, "toParentFileID": to_parent_id})
+
+    def trash(self, file_ids):
+        """删除到回收站（可通过 recover 恢复）"""
+        if isinstance(file_ids, int):
+            file_ids = [file_ids]
+        self.request("POST", "/api/v1/file/trash", json={"fileIDs": file_ids})
+
+    def recover(self, file_ids):
+        """从回收站恢复"""
+        if isinstance(file_ids, int):
+            file_ids = [file_ids]
+        self.request("POST", "/api/v1/file/recover", json={"fileIDs": file_ids})
 
     def mkdir(self, parent_id, name):
         """创建目录，返回新目录 fileId"""

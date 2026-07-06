@@ -11,8 +11,14 @@
   "entries": [
     {"fileId": 111, "oldPath": "/【韩综】豆豆笑笑2025（韩国）/01期.mp4",
      "newPath": "/豆豆笑笑 (2025)/Season 01/豆豆笑笑 (2025) S01E01.mp4"}
+  ],
+  "oldDirs": [                      # 可选，改名/移动后清理这些旧目录（按深到浅排列）
+    {"fileId": 222, "path": "/【韩综】豆豆笑笑2025（韩国）"}
   ]
 }
+
+默认在全部条目处理完后，对 oldDirs 逐个检查：若已清空则移入回收站（可用
+recover 接口找回），非空则跳过不动。加 --keep-old-dirs 可关闭此行为。
 
 回滚日志为 JSONL（output/rollback_log.jsonl），每完成一步追加一行。
 """
@@ -36,6 +42,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("plan", help="rename_plan.json 路径")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--keep-old-dirs", action="store_true", help="不清理 oldDirs 中已清空的旧目录")
     ap.add_argument("--log", default=str(Path(__file__).parent / "output" / "rollback_log.jsonl"))
     args = ap.parse_args()
 
@@ -129,6 +136,31 @@ def main():
 
     mode = "（dry-run，未实际执行）" if args.dry_run else ""
     print(f"\n完成{mode}：成功 {ok}，跳过(已完成) {skipped}，失败 {failed}")
+
+    if not args.keep_old_dirs:
+        old_dirs = plan.get("oldDirs", [])
+        cleaned = nonempty = 0
+        for d in old_dirs:
+            key = f"trashdir:{d['fileId']}"
+            if key in done:
+                continue
+            if args.dry_run:
+                print(f"[清理] {d['path']}（dry-run，未检查是否已清空）")
+                continue
+            try:
+                if c.list_dir(d["fileId"]):
+                    nonempty += 1
+                    continue
+                c.trash(d["fileId"])
+                log({"action": "trash", "fileId": d["fileId"], "path": d["path"]})
+                log({"action": "done", "fileId": key})
+                print(f"[清理] 已删除空目录：{d['path']}")
+                cleaned += 1
+            except RuntimeError as err:
+                print(f"  清理失败：{d['path']}：{err}", file=sys.stderr)
+        if not args.dry_run and old_dirs:
+            print(f"旧目录清理：已删除 {cleaned}，非空跳过 {nonempty}")
+
     if not args.dry_run:
         print(f"回滚日志：{log_path}")
 
