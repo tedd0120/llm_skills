@@ -1,0 +1,7 @@
+interface:
+  display_name: "Pi 会审"
+  short_description: "主 Agent 与多个独立 Pi 模型隔离并行评审并统一裁决"
+  default_prompt: "使用 $pi-council 让主 Agent 与多个 Pi 模型相互隔离地并行完成当前任务，再依据证据统一裁决，期间不修改被评审对象。"
+
+policy:
+  allow_implicit_invocation: false
