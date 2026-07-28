@@ -48,6 +48,7 @@ Thumbs.db
 
 # Data
 data/
+.agent-council/
 
 # Xiaohongshu auth state
 xhs_auth.json

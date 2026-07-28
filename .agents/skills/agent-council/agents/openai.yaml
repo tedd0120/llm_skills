@@ -1,0 +1,7 @@
+interface:
+  display_name: "Agent 会审"
+  short_description: "主 Agent、Pi 与 Claude 隔离并行评审并统一裁决"
+  default_prompt: "使用 $agent-council 让主 Agent、多个 Pi reviewer 与 Claude reviewer 相互隔离地完成当前任务，再依据证据统一裁决，期间不修改被评审对象。"
+
+policy:
+  allow_implicit_invocation: false
