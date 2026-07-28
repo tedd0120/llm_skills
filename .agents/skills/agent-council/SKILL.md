@@ -95,7 +95,8 @@ runner 最多默认 5 路并发，向 Git 根 `.gitignore` 添加 `.agent-counci
 ### 4. 主 Agent 并行完成同一任务
 
 1. 看到 runner 开始调用 reviewer 后，按共享简报中的同一目标、材料范围、约束和评估维度独立工作。
-2. 写出与 reviewer 同粒度的完整报告，包含 `Overall assessment`、逐项 `Findings or proposals`、`Unknowns and assumptions`。
+2. 写出与 reviewer 同粒度、同格式的完整报告，包含 `Overall assessment`、逐项 `Findings or proposals`、`Unknowns and assumptions`。
+   遵守与 reviewer 相同的精炼要求：只写可执行内容——问题、风险、缺口、具体提议；不写优点、表扬、"做得好的地方"，不复述材料，不加铺垫和收尾套话。空的部分直接写"无"。
 3. 工作期间只读取原始对象、独立证据和 runner 进度，不读取 reviewer 报告。
 4. 将完整报告一次性写入工作区外的 `--main-report-file`，视为冻结。
 5. 冻结后只等待 runner 完成，不再补写或重排。
@@ -131,6 +132,8 @@ runner 最多默认 5 路并发，向 Git 根 `.gitignore` 添加 `.agent-counci
 - 成功 reviewer：
 - 失败或被替换的 reviewer：
 ```
+
+`verdict.md` 与面向用户的结论都只写可执行内容：每项一句结论加一条理由，不复述报告原文，不写优点和寒暄。
 
 面向用户的结论必须与 `verdict.md` 一致。先讲总体结论，再总结采纳、驳回和待决事项，披露实际 reviewer 名单并给出运行目录。除非用户要求，不贴出原始报告全文。
 
