@@ -102,6 +102,9 @@ class AgentCouncilRunnerTests(unittest.TestCase):
             self.assertIn("--disable-slash-commands", command)
             self.assertIn("--strict-mcp-config", command)
             self.assertIn("dontAsk", command)
+            # The CLI rejects a bare "{}" — the object must carry mcpServers.
+            mcp_config = command[command.index("--mcp-config") + 1]
+            self.assertEqual(json.loads(mcp_config), {"mcpServers": {}})
         self.assertEqual(disabled[-1], "")
         self.assertEqual(enabled[-1], "Read,Grep,Glob")
 

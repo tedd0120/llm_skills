@@ -565,7 +565,7 @@ def build_claude_command(
         "--disable-slash-commands",
         "--strict-mcp-config",
         "--mcp-config",
-        "{}",
+        '{"mcpServers":{}}',
         "--permission-mode",
         "dontAsk",
         "--tools",
