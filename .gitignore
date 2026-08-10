@@ -49,6 +49,9 @@ Thumbs.db
 # Data
 data/
 .agent-council/
+input/
+.impeccable/
+PRODUCT.md
 
 # Xiaohongshu auth state
 xhs_auth.json
