@@ -21,6 +21,7 @@
 | **`teams-group-members`** | 360Teams 群组成员数据抓取与实时检索的组织架构树 HTML 生成 | 用户需要获取群组成员信息、导出架构树 HTML 等 | `TEAMS_AUTHORIZATION`<br>`TEAMS_GROUP_CODES` |
 | **`pan123-renamer`** | 123云盘媒体文件智能扫描与 Emby/Jellyfin 标准规范重命名 | 用户提到123网盘文件重命名、规范化媒体库等 | 123云盘开发者凭证 (`PAN123_CLIENT_ID`, `PAN123_CLIENT_SECRET`) |
 | **`think-like-fable`** | 软件开发与复杂任务的系统化方法论路由与执行框架 | 接收任何非平凡开发任务（如调试排障、重构、性能优化等）时自动触发 | 无 |
+| **`least-code`** | 反过度设计准则：写码前的存在性阶梯、假想敌拦截，以及既有代码的安全精简与评审 | 编写/重构/评审代码，或用户提到“简化”“精简”“过度设计”“YAGNI”“最小实现”等 | 无 |
 
 > 💡 **说明**：部分技能包含内部辅助组件（如 `xiaohongshu-fetch`、`xiaohongshu-summarize`、`xiaohongshu-formatter` 等），均由入口技能自动编排调用，无需手动触发。
 
@@ -56,6 +57,7 @@ pip install requests
 llm_skills/
 ├── .agents/                    # 智能体技能挂载根目录
 │   └── skills/                 # 存放各技能包的源码与 SKILL.md
+│       ├── least-code/         # 反过度设计准则技能包
 │       ├── pan123-renamer/     # 123云盘重命名技能包
 │       ├── teams-attendance/   # Teams考勤分析技能包
 │       ├── teams-group-members/# Teams群架构树生成技能包
