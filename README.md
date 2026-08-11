@@ -22,6 +22,7 @@
 | **`pan123-renamer`** | 123云盘媒体文件智能扫描与 Emby/Jellyfin 标准规范重命名 | 用户提到123网盘文件重命名、规范化媒体库等 | 123云盘开发者凭证 (`PAN123_CLIENT_ID`, `PAN123_CLIENT_SECRET`) |
 | **`think-like-fable`** | 软件开发与复杂任务的系统化方法论路由与执行框架 | 接收任何非平凡开发任务（如调试排障、重构、性能优化等）时自动触发 | 无 |
 | **`least-code`** | 反过度设计准则：写码前的存在性阶梯、假想敌拦截，以及既有代码的安全精简与评审 | 编写/重构/评审代码，或用户提到“简化”“精简”“过度设计”“YAGNI”“最小实现”等 | 无 |
+| **`brainstorming`** | 陪练式头脑风暴：定框→发散→逼问假设→收敛→落地方案文档，深度按赌注与可逆性分档 | **仅手动触发**：Claude `/brainstorming`、Codex `$brainstorming`；禁止自然语言隐式触发 | 无 |
 
 > 💡 **说明**：部分技能包含内部辅助组件（如 `xiaohongshu-fetch`、`xiaohongshu-summarize`、`xiaohongshu-formatter` 等），均由入口技能自动编排调用，无需手动触发。
 
@@ -57,6 +58,7 @@ pip install requests
 llm_skills/
 ├── .agents/                    # 智能体技能挂载根目录
 │   └── skills/                 # 存放各技能包的源码与 SKILL.md
+│       ├── brainstorming/      # 陪练式头脑风暴技能包（仅手动触发）
 │       ├── least-code/         # 反过度设计准则技能包
 │       ├── pan123-renamer/     # 123云盘重命名技能包
 │       ├── teams-attendance/   # Teams考勤分析技能包

@@ -1,6 +1,6 @@
 ---
 name: least-code
-description: 用最少的代码把事做对。写代码前先爬"存在性阶梯"（能不写就不写 → 复用仓库既有 → 标准库 → 平台原生 → 已装依赖 → 一行 → 最小实现），不为假想中的失败预先搭建缓存、重试、熔断、兜底链、单实现抽象层；也用于清理既有代码里的过度设计（安全删除，先锁行为再动手）。当任务要写、改、重构、评审代码，或用户说"简化""精简""删冗余""是不是过度设计了""能不能少写点""over-engineering""YAGNI""最小实现""清理 AI 生成的代码"时使用。不适用于纯聊天、写作、翻译、检索等非代码任务。
+description: 用最少的代码把事做对。当任务要写、改、重构、评审代码，或用户说"简化""精简""删冗余""是不是过度设计了""能不能少写点""over-engineering""YAGNI""最小实现""清理 AI 生成的代码"时使用。
 ---
 
 # 最少代码（least-code）
@@ -267,7 +267,3 @@ grep -rnE '(#|//|--) ?SHORTCUT:' . --exclude-dir={.git,node_modules,dist,build}
 目标不是"不惜代价的最少代码"，是**为自己付账的代码**——每一行都靠对应一个真实需求或一个真实故障模式来挣得它的位置。
 
 拿不准就问一句："这里看着可以更简单——要我把防御层剥掉，还是这些加固是有意为之？"
-
----
-
-<sub>本 skill 综合并改写自三个开源方案的思路：[ponytail](https://github.com/DietrichGebert/ponytail)（MIT，存在性阶梯、根因修复、债务标记、评审标签、强度档位）、[BoldGPT / anti-overengineering](https://github.com/kangw24/BoldGPT)（安全删除纪律、确定度分级、切斯特顿的栅栏、冗余分类）、[Private House Code](https://github.com/See-Sol-Lab/private-house-code-v2.5)（CC BY-NC-SA 4.0，"别盖银行"的隐喻、假想敌清单、真实边界清单、过程经济）。文字为重新组织的原创表述，非逐句翻译。</sub>
