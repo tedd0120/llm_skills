@@ -43,6 +43,16 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 - 将用户输入视为整体文本，忽略内部所有分隔符（逗号、空格、分号等）
 - 理解主旨，识别核心要素：主题、地域、场景、意图
 - 示例：输入 "广州装修公司, 对比, 避坑" 应理解为 "广州装修公司相关" 这一整体建议
+- 同时推断 `REPORT_TYPE`，不要增加强制问答轮：
+
+  | REPORT_TYPE | 判定信号 | 报告回答 |
+  |:--|:--|:--|
+  | `recommend` | 推荐、选购、哪个好、选择、对比，或明显期待一个可行动的候选结论 | 最后选哪一个？ |
+  | `plan` | 攻略、行程、怎么安排、几天、执行方案 | 按什么顺序做什么？ |
+  | `factcheck` | 概率、是不是真的、会不会、靠谱吗、风险 | 事情到底是什么情况？ |
+  | `explore` | 以上都不匹配，或用户明确只想了解讨论/争议全貌 | 大家在讨论什么？ |
+
+- 在模式 A 的关键词确认或模式 B 的配额确认中回显 `报告形态：<中文名>（REPORT_TYPE）`；用户一句话即可覆盖。用户不反对即沿用推断值，不再单独追问。
 
 ### 2. 交互轮次
 
@@ -96,7 +106,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 回复 `A` 或 `B`（默认 A）。
 ```
 
-**澄清阶段完成标志**：用户明确确认关键词（模式 A）或发散参数（模式 B），且完成速度模式与超链接格式选择。完成后**立即**按上方目录约定创建 OUTPUT_DIR，再进入阶段二。
+**澄清阶段完成标志**：用户明确确认关键词（模式 A）或发散参数（模式 B，确认内容含报告形态），且完成速度模式与超链接格式选择。完成后**立即**按上方目录约定创建 OUTPUT_DIR，再进入阶段二。
 
 ---
 
@@ -120,7 +130,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 
 **核心要求**：
 - 每完成一项任务，立即将对应 `[ ]` 改为 `[x]`
-- 阶段二结束前，必须执行 `python .agents/skills/xiaohongshu-scraper/scripts/verify_tasks.py <tasks_file_path>` 验证；返回 `TASKS_INCOMPLETE` 必须报错中止，禁止发送未完成的报告
+- 阶段二结束前，必须按步骤 5 的完整命令验证任务、raw.json 与报告；任何 `RUN_INVALID` 必须报错中止，禁止发送未通过验证的报告
 
 ### 步骤 1：确保登录
 
@@ -144,7 +154,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 
 ### 步骤 3：生成报告 → xiaohongshu-summarize
 
-阅读其 SKILL.md，读取 raw.json，生成 `{OUTPUT_DIR}/{主题}.md`。
+阅读其 SKILL.md，将 `REPORT_TYPE` 与 raw.json 一并交给组件，生成 `{OUTPUT_DIR}/{主题}.md`。
 
 ### 步骤 4：格式化报告 → xiaohongshu-formatter
 
@@ -152,7 +162,13 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 
 ### 步骤 5：发送报告
 
-将最终报告发送到用户对话框，然后执行 verify_tasks.py 验证。
+先执行下列产物验证；仅通过后才将最终报告发送到用户对话框：
+
+```text
+python .agents/skills/xiaohongshu-scraper/scripts/verify_tasks.py <tasks_file_path> --report-file <REPORT_FILE> --report-type <REPORT_TYPE>
+```
+
+启用超链接时追加 `--hyperlinks`。验证失败必须中止发送并修复产物。
 
 ### 上下文传递
 
@@ -160,6 +176,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 |------|------|------|--------|
 | `OUTPUT_DIR` | string | 搜索目录**绝对路径**（见目录约定） | fetch, summarize, formatter |
 | `REPORT_FILE` | string | 报告文件路径 `{OUTPUT_DIR}/{主题}.md`，由 scraper 确定 | summarize, formatter |
+| `REPORT_TYPE` | enum | `recommend` / `plan` / `factcheck` / `explore`；由 scraper 推断、用户可覆盖 | summarize, verify_tasks |
 | `--keywords` / `--max-posts` | flag | 搜索关键词与篇数上限 | fetch |
 | `--search-strategy` | flag (JSON) | 固定模式搜索策略 | fetch |
 | `--seen-ids` | flag (path) | 发散模式跨轮去重 ID 文件 | fetch |

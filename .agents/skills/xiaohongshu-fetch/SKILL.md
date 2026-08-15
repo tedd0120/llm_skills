@@ -18,6 +18,7 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 | `--output` | ✅ | 输出文件**绝对路径**（`{OUTPUT_DIR}/raw.json`；OUTPUT_DIR 约定见 scraper 的 SKILL.md，禁止写入 skill 目录）|
 | `--search-strategy` | ❌ | 搜索策略 JSON（固定模式使用）|
 | `--seen-ids` | ❌ | 已见 ID 文件路径（发散模式跨轮去重）|
+| `--hyperlinks` | ❌ | 生成 `id_url_map.json`；`post_id` 与 `url` 无论是否启用都会写入 raw.json |
 | `--safe-mode` | ❌ | 安全模式：延迟增大 2.5-3x + 10% 概率随机阅读停顿（5-15s），适用于曾被风控拦截的场景 |
 | `--speed-mode` | ❌ | 极速模式：去除所有延时，风控风险显著上升。与 `--safe-mode` 互斥，同时传入时 `--speed-mode` 优先 |
 
@@ -55,4 +56,7 @@ python .agents/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
 |------|------|
 | `search_time` | 执行时间 |
 | `keywords` | 搜索关键词列表 |
-| `posts` | 帖子数组，每个帖子包含：note_id, url, title, content, author, date, likes, collects, comments_count, comments |
+| `dedup` | 抓取与去重统计：`posts_scraped`、`posts_unique`、`dropped_duplicate`、`dropped_id_mismatch` |
+| `posts` | 去重后的帖子数组；每帖含 `post_id`、`url`、`card_url`、正文与互动数据，评论为 `{text, author, likes, is_reply}` 对象 |
+
+抓取时先校验详情页实际 note id 与搜索卡片目标一致；不一致时重试一次，仍失败则丢弃并输出 `ID_MISMATCH:<expected>:<actual>`。内容按规范化后的作者、标题和正文前 300 字生成指纹，写盘前保留首次出现的记录。

@@ -13,7 +13,9 @@ import random
 import argparse
 import hashlib
 import signal
+import unicodedata
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # 导入同目录下的选择器
@@ -88,6 +90,7 @@ class XHSScraper:
         self.safe_mode = safe_mode
         self.speed_mode = speed_mode
         self.auth_state_path = AUTH_STATE_PATH
+        self.dropped_id_mismatch = 0
 
         # 启动模式横幅
         if self.speed_mode:
@@ -154,30 +157,100 @@ class XHSScraper:
     def _parse_int(value: str, default: int = 0) -> int:
         """将字符串转换为整数，失败返回默认值"""
         try:
-            return int(value)
+            text = str(value).strip().replace(",", "")
+            if not text:
+                return default
+            multiplier = 1
+            if text.endswith("万"):
+                multiplier = 10000
+                text = text[:-1]
+            elif text.lower().endswith("k"):
+                multiplier = 1000
+                text = text[:-1]
+            return int(float(text) * multiplier)
         except (ValueError, TypeError):
             return default
+
+    @staticmethod
+    def _normalize_comment_text(text: str) -> tuple[str, bool]:
+        normalized = (text or "").strip()
+        if normalized.startswith('\":\"'):
+            return normalized[3:].lstrip(), True
+        if normalized.startswith(":"):
+            return normalized[1:].lstrip(), True
+        return normalized, False
+
+    @staticmethod
+    def _note_id_from_url(url: str) -> str:
+        """从详情 URL 中提取 note id；搜索列表页返回空。"""
+        parts = [part for part in urlparse(url or "").path.split("/") if part]
+        for marker in ("explore", "item", "search_result"):
+            if marker in parts:
+                index = parts.index(marker) + 1
+                if index < len(parts):
+                    return parts[index]
+        return ""
+
+    @staticmethod
+    def _normalize_fingerprint_text(value: str) -> str:
+        return "".join(
+            char for char in (value or "")
+            if not char.isspace() and unicodedata.category(char) != "Cf"
+        )
+
+    @classmethod
+    def _content_fingerprint(cls, post: dict) -> str:
+        payload = "".join((
+            cls._normalize_fingerprint_text(post.get("author", "")),
+            cls._normalize_fingerprint_text(post.get("title", "")),
+            cls._normalize_fingerprint_text(post.get("content", ""))[:300],
+        ))
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _deduplicate_posts(cls, posts: list[dict]) -> tuple[list[dict], int]:
+        unique = []
+        seen = set()
+        for post in posts:
+            fingerprint = cls._content_fingerprint(post)
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            unique.append(post)
+        return unique, len(posts) - len(unique)
 
     def _save_results(self, all_posts: list, output_file: str, keywords: list):
         """保存抓取结果到文件"""
         if not all_posts or not output_file:
             return
 
+        unique_posts, dropped_duplicate = self._deduplicate_posts(all_posts)
+
         output_data = {
             "search_time": time.strftime("%Y-%m-%d %H:%M:%S"),
             "keywords": keywords,
             "search_strategy": self.search_strategy,
-            "posts": all_posts,
+            "dedup": {
+                "posts_scraped": len(all_posts),
+                "posts_unique": len(unique_posts),
+                "dropped_duplicate": dropped_duplicate,
+                "dropped_id_mismatch": self.dropped_id_mismatch,
+            },
+            "posts": unique_posts,
         }
         out = json.dumps(output_data, ensure_ascii=False, indent=2)
         Path(output_file).parent.mkdir(parents=True, exist_ok=True)
         Path(output_file).write_text(out, encoding="utf-8")
-        print(f"\n[✓] 共 {len(all_posts)} 篇 → {output_file}", flush=True)
+        print(
+            f"\n[✓] 原始 {len(all_posts)} 篇，去重后 {len(unique_posts)} 篇 "
+            f"(重复 {dropped_duplicate}，ID 不匹配 {self.dropped_id_mismatch}) → {output_file}",
+            flush=True,
+        )
 
         # 生成 id_url_map.json（超链接启用时）
         if self.hyperlinks:
             id_url_map = {}
-            for post in all_posts:
+            for post in unique_posts:
                 post_id = post.get("post_id", "")
                 url = post.get("url", "")
                 if post_id and url:
@@ -562,21 +635,35 @@ class XHSScraper:
             print(f"  [{len(results)+1}/{limit}] {target_url[:60]}…", flush=True)
 
             try:
-                # 滚动到元素可见并点击
-                target_el.scroll_into_view_if_needed()
-                self._do_sleep(0.3, 0.8)
-                target_el.click()
+                data = None
+                id_matched = False
+                actual_id = ""
+                for attempt in range(2):
+                    prev_id = self._note_id_from_url(page.url)
+                    target_el.scroll_into_view_if_needed()
+                    self._do_sleep(0.3, 0.8)
+                    target_el.click()
+                    data, actual_id, id_matched = self._extract_post_after_click(
+                        page,
+                        target_note_id,
+                        target_url,
+                        prev_id,
+                    )
+                    if id_matched:
+                        break
+                    self._close_detail(page)
+                    if attempt == 0:
+                        print("    [!] 详情未切换到目标帖子，重试一次", flush=True)
 
-                # 提取帖子数据
-                data = self._extract_post_after_click(page, target_url)
+                if id_matched:
+                    self._close_detail(page)
 
-                # 关闭详情页返回搜索结果
-                close_btn = page.locator(S.CLOSE_BUTTON)
-                if close_btn.count() > 0:
-                    close_btn.first.click()
-                else:
-                    page.keyboard.press("Escape")
-                self._do_sleep(0.5, 1.5)
+                if not id_matched:
+                    self.dropped_id_mismatch += 1
+                    print(
+                        f"ID_MISMATCH:{target_note_id}:{actual_id or 'unknown'}",
+                        flush=True,
+                    )
 
                 if data:
                     results.append(data)
@@ -593,9 +680,7 @@ class XHSScraper:
                 processed_ids.add(target_note_id)  # 标记为已处理
                 # 尝试关闭弹窗
                 try:
-                    close_btn = page.locator(S.CLOSE_BUTTON)
-                    if close_btn.count() > 0:
-                        close_btn.first.click()
+                    self._close_detail(page)
                 except:
                     pass
 
@@ -607,9 +692,51 @@ class XHSScraper:
     # ------------------------------------------------------------------
     # 帖子提取（点击导航版）
     # ------------------------------------------------------------------
-    def _extract_post_after_click(self, page: Page, expected_url: str) -> dict | None:
+    def _close_detail(self, page: Page):
+        close_btn = page.locator(S.CLOSE_BUTTON)
+        if close_btn.count() > 0 and close_btn.first.is_visible():
+            close_btn.first.click()
+        else:
+            page.keyboard.press("Escape")
+        self._do_sleep(0.5, 1.5)
+
+    def _actual_note_id(self, page: Page) -> str:
+        note_id = self._note_id_from_url(page.url)
+        if note_id:
+            return note_id
+        detail_links = page.locator(S.POST_DETAIL_LINK)
+        if detail_links.count() > 0:
+            return self._note_id_from_url(detail_links.first.get_attribute("href") or "")
+        return ""
+
+    def _wait_for_target_note(
+        self,
+        page: Page,
+        target_note_id: str,
+        prev_id: str,
+        timeout_ms: int = 5000,
+    ) -> tuple[bool, str]:
+        deadline = time.monotonic() + timeout_ms / 1000
+        actual_id = ""
+        while time.monotonic() < deadline:
+            actual_id = self._actual_note_id(page)
+            if actual_id == target_note_id and actual_id != prev_id:
+                return True, actual_id
+            page.wait_for_timeout(100)
+        return False, actual_id
+
+    def _extract_post_after_click(
+        self,
+        page: Page,
+        target_note_id: str,
+        card_url: str,
+        prev_id: str,
+    ) -> tuple[dict | None, str, bool]:
+        id_matched, actual_id = self._wait_for_target_note(page, target_note_id, prev_id)
+        if not id_matched:
+            return None, actual_id, False
         try:
-            page.wait_for_selector("#detail-title, .title, .note-content", timeout=10000)
+            page.wait_for_selector(S.POST_DETAIL_CONTAINER, timeout=10000)
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
             self._do_sleep(1, 2)
@@ -618,8 +745,11 @@ class XHSScraper:
                 self._exit_not_logged_in()
             print("    [!] 帖子加载超时，跳过", flush=True)
             self._save_debug_screenshot(page, "post_timeout_click")
-            return None
-        return self._extract_post_data(page, expected_url)
+            return None, actual_id, True
+        actual_url = page.url
+        if self._note_id_from_url(actual_url) != actual_id:
+            actual_url = f"https://www.xiaohongshu.com/explore/{actual_id}"
+        return self._extract_post_data(page, actual_url, card_url), actual_id, True
 
     # ------------------------------------------------------------------
     # 帖子提取
@@ -629,7 +759,7 @@ class XHSScraper:
             page.goto(url, wait_until="domcontentloaded")
             if self._is_not_logged_in(page):
                 self._exit_not_logged_in()
-            page.wait_for_selector("#detail-title, .title, .note-content", timeout=10000)
+            page.wait_for_selector(S.POST_DETAIL_CONTAINER, timeout=10000)
             self._do_sleep(1, 2)
         except PwTimeout:
             if self._is_not_logged_in(page):
@@ -637,27 +767,22 @@ class XHSScraper:
             print("    [!] 帖子加载超时，跳过", flush=True)
             self._save_debug_screenshot(page, "post_timeout")
             return None
-        return self._extract_post_data(page, url)
+        return self._extract_post_data(page, page.url or url, url)
 
-    def _extract_post_data(self, page: Page, url: str) -> dict | None:
-        title   = self._txt(page, "#detail-title") or self._txt(page, ".title")
-        content = self._txt(page, ".note-content") or self._txt(page, "#detail-desc")
-        author  = self._txt(page, ".username")
-        date    = self._txt(page, ".bottom-container .date") or self._txt(page, ".date")
-        likes   = self._txt(page, ".like-wrapper .count",    "0")
-        collects= self._txt(page, ".collect-wrapper .count", "0")
-        chat    = self._txt(page, ".chat-wrapper .count",    "0")
+    def _extract_post_data(self, page: Page, url: str, card_url: str = "") -> dict | None:
+        title = self._txt(page, S.POST_TITLE)
+        content = self._txt(page, S.POST_CONTENT)
+        author = self._txt(page, S.POST_AUTHOR)
+        date = self._txt(page, S.POST_DATE)
+        likes = self._txt(page, S.LIKE_COUNT, "0")
+        collects = self._txt(page, S.COLLECT_COUNT, "0")
+        chat = self._txt(page, S.COMMENT_COUNT, "0")
 
         # 评论
         comments = self._extract_comments(page)
 
-        # 从 URL 中提取帖子 ID
-        # URL 格式: https://www.xiaohongshu.com/explore/{note_id} 或 /discovery/item/{note_id}
-        post_id = ""
-        if url:
-            # 去除查询参数和尾部斜杠
-            clean_url = url.rstrip("/").split("?")[0]
-            post_id = clean_url.split("/")[-1] if clean_url else ""
+        post_id = self._note_id_from_url(url)
+        canonical_url = f"https://www.xiaohongshu.com/explore/{post_id}" if post_id else url
 
         result = {
             "title":        title,
@@ -667,29 +792,28 @@ class XHSScraper:
             "likes":        self._parse_int(likes),
             "collects":     self._parse_int(collects),
             "comments_count": self._parse_int(chat),
+            "comments_captured": len(comments),
             "comments":     comments,
+            "post_id":      post_id,
+            "url":          canonical_url,
+            "card_url":     card_url,
         }
-
-        # 超链接启用时包含 post_id 和 url
-        if self.hyperlinks:
-            result["post_id"] = post_id
-            result["url"] = url
 
         return result
 
-    def _extract_comments(self, page: Page) -> list[str]:
+    def _extract_comments(self, page: Page) -> list[dict]:
         comments = []
         try:
             # 等待评论区加载（功能性等待，极速模式下也需要）
             try:
-                page.wait_for_selector(".comment-item", timeout=2000)
+                page.wait_for_selector(f"{S.COMMENT_CONTAINER} {S.COMMENT_ITEM}", timeout=2000)
             except PwTimeout:
                 # 可能真的没有评论，直接返回空
                 return comments
 
             # 展开更多评论（最多 2 次）
             for _ in range(2):
-                more = page.locator("text=展开更多评论")
+                more = page.locator(S.MORE_COMMENTS_BUTTON)
                 if more.count() > 0 and more.first.is_visible():
                     more.first.click()
                     # 等待新评论加载（功能性等待，极速模式下也需要）
@@ -700,11 +824,24 @@ class XHSScraper:
                 else:
                     break
 
-            items = page.locator(".comment-item .content").all()
+            items = page.locator(f"{S.COMMENT_CONTAINER} {S.COMMENT_ITEM}").all()
             for item in items:
-                txt = item.text_content().strip()
-                if txt:
-                    comments.append(txt)
+                content = item.locator(".content")
+                if content.count() == 0:
+                    continue
+                text, is_reply = self._normalize_comment_text(content.first.text_content() or "")
+                if not text:
+                    continue
+                author = item.locator(".author .name")
+                like = item.locator(S.COMMENT_LIKE_COUNT)
+                comments.append({
+                    "text": text,
+                    "author": (author.first.text_content() or "").strip() if author.count() else "",
+                    "likes": self._parse_int(
+                        (like.first.text_content() or "0").strip() if like.count() else "0"
+                    ),
+                    "is_reply": is_reply,
+                })
         except Exception:
             pass
         return comments

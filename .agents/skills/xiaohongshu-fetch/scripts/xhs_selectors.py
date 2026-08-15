@@ -2,7 +2,7 @@
 小红书 DOM 选择器集中管理
 为了应对小红书可能的改版，将所有关键的 CSS/XPath 选择器集中于此
 
-最后验证时间: 2026-02-26  (基于实际页面 DOM 分析)
+最后验证时间: 2026-08-15  (基于实际页面 DOM 分析)
 """
 
 class XHSSelectors:
@@ -31,17 +31,18 @@ class XHSSelectors:
     
     # --- 帖子详情页 ---
     POST_DETAIL_CONTAINER = "#noteContainer"
-    POST_TITLE = "#detail-title"
-    POST_CONTENT = "#detail-desc .note-text"
-    POST_AUTHOR = ".author-container .username"
-    POST_DATE = ".date"
-    POST_BOTTOM_AUTHOR = ".author-wrapper"
+    POST_TITLE = "#noteContainer #detail-title"
+    POST_CONTENT = "#noteContainer #detail-desc .note-text, #noteContainer .note-content, #noteContainer #detail-desc"
+    POST_AUTHOR = "#noteContainer .author-container .username"
+    POST_DATE = "#noteContainer .bottom-container .date, #noteContainer .date"
+    POST_BOTTOM_AUTHOR = "#noteContainer .author-wrapper"
+    POST_DETAIL_LINK = "#noteContainer a[href*='/explore/'], #noteContainer a[href*='/discovery/item/']"
     
     # 互动数据
-    LIKE_COUNT = ".like-wrapper .count"
-    COLLECT_COUNT = ".collect-wrapper .count"
-    COMMENT_COUNT = ".chat-wrapper .count"
-    SHARE_COUNT = ".share-wrapper .count"
+    LIKE_COUNT = "#noteContainer .like-wrapper .count"
+    COLLECT_COUNT = "#noteContainer .collect-wrapper .count"
+    COMMENT_COUNT = "#noteContainer .chat-wrapper .count"
+    SHARE_COUNT = "#noteContainer .share-wrapper .count"
     
     # 关闭按钮
     CLOSE_BUTTON = ".close-circle"
@@ -51,6 +52,7 @@ class XHSSelectors:
     COMMENT_ITEM = ".comment-item"
     COMMENT_CONTENT = ".comment-item .content"
     COMMENT_AUTHOR = ".comment-item .author .name"
+    COMMENT_LIKE_COUNT = ".like-wrapper .count"
     
     # 展开更多评论
     MORE_COMMENTS_BUTTON = "text=展开更多评论"
