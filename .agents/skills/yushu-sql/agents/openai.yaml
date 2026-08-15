@@ -1,0 +1,4 @@
+interface:
+  display_name: "毓数 SQL 查询"
+  short_description: "通过 OpenCLI 在公司毓数平台安全执行和导出 SQL 查询"
+  default_prompt: "使用 $yushu-sql 在公司毓数平台执行一条只读 SQL 并返回结果。"
