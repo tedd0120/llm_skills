@@ -1,0 +1,4 @@
+interface:
+  display_name: "网站 UI/UX 视觉令牌提取"
+  short_description: "从网址提取 UI/UX，并生成含真实组件预览的五份视觉令牌文件"
+  default_prompt: "使用 $website-uiux-extractor 分析这个网址，并生成五份视觉令牌与设计规范文件。"

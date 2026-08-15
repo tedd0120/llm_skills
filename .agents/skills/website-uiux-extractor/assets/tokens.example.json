@@ -1,0 +1,438 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$description": "Design tokens for Example Market",
+  "meta": {
+    "name": "Example Market",
+    "description": "A calm editorial marketplace built on crisp white surfaces, dense charcoal type, a focused cobalt interaction color, and soft card geometry.",
+    "theme": "light"
+  },
+  "color": {
+    "white": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "Canonical white primitive shared by light semantic roles."
+    },
+    "canvas": {
+      "$value": "{color.white}",
+      "$type": "color",
+      "$description": "Use for the main page canvas."
+    },
+    "primary": {
+      "$value": "#225cff",
+      "$type": "color",
+      "$description": "Use for the highest-priority interactive action."
+    },
+    "primary-hover": {
+      "$value": "#1747cc",
+      "$type": "color",
+      "$description": "Use for the hovered primary action."
+    },
+    "on-primary": {
+      "$value": "{color.white}",
+      "$type": "color",
+      "$description": "Use for content placed on the primary color."
+    },
+    "ink": {
+      "$value": "#17181b",
+      "$type": "color",
+      "$description": "Use for headings and maximum-emphasis text."
+    },
+    "body": {
+      "$value": "#3c404a",
+      "$type": "color",
+      "$description": "Use for normal body copy."
+    },
+    "muted": {
+      "$value": "#6f7480",
+      "$type": "color",
+      "$description": "Use for secondary labels and metadata."
+    },
+    "border": {
+      "$value": "#d9dce5",
+      "$type": "color",
+      "$description": "Use for quiet dividers and control outlines."
+    },
+    "surface-soft": {
+      "$value": "#f6f7fb",
+      "$type": "color",
+      "$description": "Use for alternating sections and recessed controls."
+    }
+  },
+  "typography": {
+    "display": {
+      "$value": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": "48px",
+        "fontWeight": 650,
+        "lineHeight": 1.08,
+        "letterSpacing": "-1.2px"
+      },
+      "$type": "typography",
+      "$description": "Use for the primary page statement."
+    },
+    "heading": {
+      "$value": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": "28px",
+        "fontWeight": 620,
+        "lineHeight": 1.2,
+        "letterSpacing": "-0.4px"
+      },
+      "$type": "typography",
+      "$description": "Use for major section headings."
+    },
+    "body": {
+      "$value": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": "16px",
+        "fontWeight": 400,
+        "lineHeight": 1.5,
+        "letterSpacing": "0px"
+      },
+      "$type": "typography",
+      "$description": "Use for normal reading text."
+    },
+    "button": {
+      "$value": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": "15px",
+        "fontWeight": 600,
+        "lineHeight": 1.2,
+        "letterSpacing": "0.1px"
+      },
+      "$type": "typography",
+      "$description": "Use for button labels."
+    }
+  },
+  "spacing": {
+    "xs": {
+      "$value": "4px",
+      "$type": "dimension",
+      "$description": "Tight inline separation."
+    },
+    "sm": {
+      "$value": "8px",
+      "$type": "dimension",
+      "$description": "Compact control spacing."
+    },
+    "md": {
+      "$value": "16px",
+      "$type": "dimension",
+      "$description": "Default element spacing."
+    },
+    "lg": {
+      "$value": "24px",
+      "$type": "dimension",
+      "$description": "Card and group spacing."
+    },
+    "xl": {
+      "$value": "40px",
+      "$type": "dimension",
+      "$description": "Large content separation."
+    },
+    "section": {
+      "$value": "80px",
+      "$type": "dimension",
+      "$description": "Desktop section separation."
+    }
+  },
+  "radius": {
+    "sm": {
+      "$value": "6px",
+      "$type": "dimension",
+      "$description": "Small controls."
+    },
+    "md": {
+      "$value": "12px",
+      "$type": "dimension",
+      "$description": "Cards and inputs."
+    },
+    "lg": {
+      "$value": "20px",
+      "$type": "dimension",
+      "$description": "Feature surfaces."
+    },
+    "pill": {
+      "$value": "9999px",
+      "$type": "dimension",
+      "$description": "Pills and circular controls."
+    }
+  },
+  "shadow": {
+    "card": {
+      "$value": {
+        "color": "#11182714",
+        "offsetX": "0px",
+        "offsetY": "6px",
+        "blur": "24px",
+        "spread": "0px"
+      },
+      "$type": "shadow",
+      "$description": "Default floating card elevation."
+    }
+  },
+  "duration": {
+    "fast": {
+      "$value": "120ms",
+      "$type": "duration",
+      "$description": "Hover and press feedback."
+    },
+    "normal": {
+      "$value": "220ms",
+      "$type": "duration",
+      "$description": "Popover and panel transitions."
+    }
+  },
+  "easing": {
+    "standard": {
+      "$value": [0.2, 0, 0, 1],
+      "$type": "cubicBezier",
+      "$description": "Default state transition curve."
+    }
+  },
+  "breakpoint": {
+    "mobile": {
+      "$value": "390px",
+      "$type": "dimension",
+      "$description": "Observed compact mobile composition."
+    },
+    "desktop": {
+      "$value": "1200px",
+      "$type": "dimension",
+      "$description": "Observed full desktop composition."
+    }
+  },
+  "$extensions": {
+    "com.website-uiux-extractor": {
+      "source": {
+        "url": "https://example.com/",
+        "capturedAt": "2026-08-14T10:00:00+08:00"
+      },
+      "coverage": {
+        "viewports": ["1440x900", "390x844"],
+        "routes": [
+          {
+            "url": "https://example.com/",
+            "family": "landing",
+            "states": ["default", "navigation-open"]
+          },
+          {
+            "url": "https://example.com/catalog",
+            "family": "listing",
+            "states": ["default", "filter-open", "empty"]
+          }
+        ],
+        "gaps": ["Checkout requires authentication."]
+      },
+      "layout": {
+        "density": "comfortable",
+        "maxContentWidth": "1200px",
+        "sectionGap": "80px",
+        "cardPadding": "24px",
+        "elementGap": "16px",
+        "gridColumns": "12",
+        "gutter": "24px"
+      },
+      "components": [
+        {
+          "name": "button-primary",
+          "role": "Highest-priority conversion action.",
+          "properties": {
+            "backgroundColor": "{color.primary}",
+            "textColor": "{color.on-primary}",
+            "typography": "{typography.button}",
+            "radius": "{radius.pill}",
+            "padding": "12px 24px"
+          },
+          "states": ["default", "hover", "focus-visible", "disabled"],
+          "specimen": {
+            "kind": "button",
+            "label": "Continue",
+            "states": {
+              "default": {},
+              "hover": {
+                "style": {
+                  "backgroundColor": "{color.primary-hover}"
+                }
+              },
+              "focus-visible": {
+                "style": {
+                  "outlineColor": "{color.primary}"
+                }
+              },
+              "disabled": {
+                "disabled": true,
+                "style": {
+                  "backgroundColor": "{color.surface-soft}",
+                  "textColor": "{color.muted}"
+                }
+              }
+            }
+          },
+          "evidence": [
+            {
+              "url": "https://example.com/",
+              "viewport": "1440x900",
+              "state": "default",
+              "note": "Hero CTA"
+            }
+          ]
+        },
+        {
+          "name": "search-field",
+          "role": "Primary catalog query control.",
+          "properties": {
+            "backgroundColor": "{color.canvas}",
+            "textColor": "{color.ink}",
+            "typography": "{typography.body}",
+            "radius": "{radius.md}",
+            "height": "48px"
+          },
+          "states": ["default", "focus-visible", "filled", "error"],
+          "specimen": {
+            "kind": "input",
+            "label": "Search",
+            "placeholder": "Search catalog",
+            "states": {
+              "default": {},
+              "focus-visible": {
+                "style": {
+                  "outlineColor": "{color.primary}"
+                }
+              },
+              "filled": {
+                "value": "Editorial chair"
+              }
+            }
+          },
+          "evidence": [
+            {
+              "url": "https://example.com/catalog",
+              "viewport": "390x844",
+              "state": "focus-visible",
+              "note": "Sticky mobile search"
+            }
+          ]
+        },
+        {
+          "name": "product-card",
+          "role": "Repeatable catalog result surface.",
+          "properties": {
+            "backgroundColor": "{color.canvas}",
+            "textColor": "{color.ink}",
+            "radius": "{radius.lg}",
+            "shadow": "{shadow.card}",
+            "padding": "24px"
+          },
+          "states": ["default", "hover", "loading"],
+          "specimen": {
+            "kind": "card",
+            "label": "Product card",
+            "description": "Quiet content surface",
+            "states": {
+              "default": {},
+              "hover": {
+                "style": {
+                  "shadow": "{shadow.card}"
+                }
+              }
+            }
+          },
+          "evidence": [
+            {
+              "url": "https://example.com/catalog",
+              "viewport": "1440x900",
+              "state": "hover",
+              "note": "First result card"
+            }
+          ]
+        },
+        {
+          "name": "availability-switch",
+          "role": "Toggle an in-stock catalog filter.",
+          "properties": {
+            "trackColor": "{color.border}",
+            "fillColor": "{color.primary}",
+            "thumbColor": "{color.canvas}",
+            "typography": "{typography.body}"
+          },
+          "states": ["default", "selected", "disabled"],
+          "specimen": {
+            "kind": "switch",
+            "label": "In stock only",
+            "states": {
+              "default": {},
+              "selected": {
+                "checked": true
+              },
+              "disabled": {
+                "disabled": true
+              }
+            }
+          },
+          "evidence": [
+            {
+              "url": "https://example.com/catalog",
+              "viewport": "1440x900",
+              "state": "selected",
+              "note": "Availability filter"
+            }
+          ]
+        },
+        {
+          "name": "price-range",
+          "role": "Select the catalog price ceiling.",
+          "properties": {
+            "trackColor": "{color.border}",
+            "fillColor": "{color.primary}",
+            "thumbColor": "{color.canvas}",
+            "typography": "{typography.body}",
+            "width": "240px"
+          },
+          "states": ["default", "disabled"],
+          "specimen": {
+            "kind": "slider",
+            "label": "Maximum price",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "value": 62,
+            "states": {
+              "default": {},
+              "disabled": {
+                "disabled": true,
+                "style": {
+                  "opacity": 0.45
+                }
+              }
+            }
+          },
+          "evidence": [
+            {
+              "url": "https://example.com/catalog",
+              "viewport": "390x844",
+              "state": "default",
+              "note": "Mobile price filter"
+            }
+          ]
+        }
+      ],
+      "guidelines": {
+        "do": [
+          "Use the cobalt primary only for interactive emphasis.",
+          "Keep content surfaces predominantly white."
+        ],
+        "avoid": [
+          "Adding decorative accent colors outside the observed palette.",
+          "Compressing the documented section rhythm."
+        ]
+      },
+      "responsiveNotes": [
+        "The catalog grid collapses from four columns to one at the mobile composition."
+      ],
+      "motionNotes": [
+        "Controls use short opacity and color transitions; panels use the normal duration."
+      ]
+    }
+  }
+}
