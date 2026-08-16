@@ -94,7 +94,7 @@ class XHSScraper:
 
         # 启动模式横幅
         if self.speed_mode:
-            print("[⚡] 极速模式 — 已去除所有延时", flush=True)
+            print("[⚡] 极速模式 — 保留轻微随机延时", flush=True)
         elif self.safe_mode:
             print("[🛡️] 安全模式 — 延迟增大，模拟人类阅读节奏", flush=True)
 
@@ -107,8 +107,9 @@ class XHSScraper:
         time.sleep(random.uniform(lo, hi))
 
     def _do_sleep(self, lo=3, hi=8):
-        """实例方法：极速模式跳过，安全模式增大延迟+阅读停顿"""
+        """实例方法：极速模式使用 10% 延时，安全模式增大延迟+阅读停顿"""
         if self.speed_mode:
+            time.sleep(random.uniform(lo, hi) * 0.1)
             return
         if self.safe_mode:
             lo_safe = lo * 2.5
@@ -594,27 +595,27 @@ class XHSScraper:
         print(f"  开始边滚动边抓取，目标 {limit} 篇", flush=True)
 
         while len(results) < limit:
-            # 每次只获取一个未处理的帖子（确保元素在 DOM 中）
-            link_els = page.locator(S.POST_LINK).all()
-            target_el = None
+            # 只快照 href，不保留按 DOM 位置绑定的 Locator。
+            # 瀑布流重排后，nth(i) 可能已经指向另一张卡片。
+            link_hrefs = page.locator(S.POST_LINK).evaluate_all(
+                "(links) => links.map(link => link.getAttribute('href')).filter(Boolean)"
+            )
+            target_href = None
             target_note_id = None
             target_url = None
 
-            for el in link_els:
-                href = el.get_attribute("href")
-                if not href:
-                    continue
-                note_id = href.split("/")[-1].split("?")[0]
+            for href in link_hrefs:
+                note_id = self._note_id_from_url(href)
                 # 找到第一个未处理的帖子
-                if note_id not in processed_ids and note_id not in seen:
+                if note_id and note_id not in processed_ids and note_id not in seen:
                     full_url = ("https://www.xiaohongshu.com" + href) if href.startswith("/") else href
-                    target_el = el
+                    target_href = href
                     target_note_id = note_id
                     target_url = full_url
                     break
 
             # 如果没有找到未处理的帖子，滚动加载更多
-            if target_el is None:
+            if target_href is None:
                 consecutive_empty_scrolls += 1
                 if consecutive_empty_scrolls >= max_empty_scrolls:
                     print(f"  连续 {max_empty_scrolls} 次无新内容，停止抓取", flush=True)
@@ -640,8 +641,17 @@ class XHSScraper:
                 actual_id = ""
                 for attempt in range(2):
                     prev_id = self._note_id_from_url(page.url)
+                    # 每次尝试都按完整 href 重新定位，禁止复用重排前的位置 Locator。
+                    target_el = page.locator(
+                        f"{S.POST_LINK}[href={json.dumps(target_href)}]"
+                    ).first
                     target_el.scroll_into_view_if_needed()
                     self._do_sleep(0.3, 0.8)
+                    href_before_click = target_el.get_attribute("href") or ""
+                    if href_before_click != target_href:
+                        raise RuntimeError(
+                            f"点击前卡片 href 发生变化: {target_href} -> {href_before_click}"
+                        )
                     target_el.click()
                     data, actual_id, id_matched = self._extract_post_after_click(
                         page,
@@ -698,7 +708,8 @@ class XHSScraper:
             close_btn.first.click()
         else:
             page.keyboard.press("Escape")
-        self._do_sleep(0.5, 1.5)
+        # 功能性等待：轻微随机延时不能替代弹窗状态同步。
+        page.wait_for_selector(S.POST_DETAIL_CONTAINER, state="hidden", timeout=5000)
 
     def _actual_note_id(self, page: Page) -> str:
         note_id = self._note_id_from_url(page.url)
@@ -869,7 +880,7 @@ if __name__ == "__main__":
     parser.add_argument("--safe-mode", action="store_true",
                         help="安全模式：延迟增大 2.5-3x + 随机阅读停顿，降低风控风险")
     parser.add_argument("--speed-mode", action="store_true",
-                        help="极速模式：去除所有随机延时，加速抓取（可能触发风控）")
+                        help="极速模式：使用正常模式 10% 的轻微随机延时（仍可能触发风控）")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
