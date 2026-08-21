@@ -37,15 +37,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
 # ---- 默认值（360 LiteLLM Gateway）----
-DEFAULT_BASE_URL = os.environ.get(
-    "LLM_BASE_URL", "https://litellm-dev.sandbox.deepbank.daikuan.qihoo.net")
-DEFAULT_API_KEY = os.environ.get(
-    "LLM_API_KEY", "sk-REPLACED")
-# 该域名仅能通过本地代理解析（与 pi settings 的 httpProxy 一致）
-DEFAULT_PROXY = os.environ.get("LLM_PROXY") or os.environ.get(
-    "LLM_HTTP_PROXY", "http://127.0.0.1:7897")
-
-
 def _repo_root():
     """定位仓库根目录（向上找 .git），找不到则回退到当前工作目录。"""
     p = Path(__file__).resolve()
@@ -53,6 +44,30 @@ def _repo_root():
         if (parent / ".git").exists():
             return parent
     return Path.cwd()
+
+
+def load_env():
+    """从仓库根目录 .env 读入环境变量（不覆盖已有值）。"""
+    env = _repo_root() / ".env"
+    if not env.is_file():
+        return
+    for line in env.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        os.environ.setdefault(k.strip(), v.strip())
+
+
+load_env()
+
+DEFAULT_BASE_URL = os.environ.get(
+    "LLM_BASE_URL", "https://litellm-dev.sandbox.deepbank.daikuan.qihoo.net")
+# API key 只从环境变量 / .env 读取，不再硬编码（缺失时脚本会报错提示）
+DEFAULT_API_KEY = os.environ.get("LLM_API_KEY", "")
+# 该域名仅能通过本地代理解析（与 pi settings 的 httpProxy 一致）
+DEFAULT_PROXY = os.environ.get("LLM_PROXY") or os.environ.get(
+    "LLM_HTTP_PROXY", "http://127.0.0.1:7897")
 
 
 # 报告默认输出到仓库根目录 data/litellm-model-speedtest/（与 cwd 无关）
@@ -549,6 +564,10 @@ def main(argv=None):
     ap.add_argument("--no-html", action="store_true", help="不生成 HTML 报告")
     ap.add_argument("--out", default=None, help="结果 JSON 输出路径（覆盖默认）")
     args = ap.parse_args(argv)
+
+    if not args.api_key:
+        log("错误：未提供 API key。请在仓库根目录 .env 中配置 LLM_API_KEY，或用 --api-key 传入。")
+        return 1
 
     proxies = build_proxies(args.proxy or None)
     headers = build_headers(args.api_key)

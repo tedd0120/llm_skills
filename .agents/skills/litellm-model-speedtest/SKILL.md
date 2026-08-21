@@ -17,6 +17,7 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 
 - **域名只能走本地代理**解析：必须用 `http://127.0.0.1:7897`（与 pi settings 的 `httpProxy` 一致），直连会 `Could not resolve host`。
 - 对话端点是 **Anthropic Messages 格式**：`POST {base}/v1/messages`，头 `x-api-key` + `anthropic-version: 2023-06-01`。
+- API key 从**仓库根目录 `.env`** 的 `LLM_API_KEY` 读取（不再硬编码），缺失时脚本会报错提示；`--api-key` 或环境变量可覆盖。
 - 拉模型清单用 OpenAI 风格端点：`GET {base}/v1/models`（返回可路由的模型 ID 全集），`GET {base}/model/info`（返回元信息，但**同模型名有多条部署记录**，只取第一条）。
 - `/v1/models` 里混着**非对话模型**：embedding（如 `bge-m3`）、图像生成（如 `qwen-image`）、plan 类（`qwen3-*-plan-*`）、路由组（`all-team-models`）——它们测速会失败或返回空，属正常，不是网关挂了。
 - 部分模型对当前 key **无权限(403)**、后端不存在(404)、无可用 channel(503)——归因后单独列示。
@@ -58,7 +59,7 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 - **别只看 `/model/info` 数量**：它返回的是部署记录数（360 上是 79 条），`/v1/models` 才是可路由模型数（55 个）。以 `/v1/models` 为准。
 - **同模型多个后端速度差异巨大**：deepseek-v4-flash 在 `m1/`(109 tok/s)、`360/`(63)、`-openai`(58)、`m2/`(24) 之间差 4 倍。选模型时带对前缀，别用错部署。
 - **403/404/503 与"模型不存在"要区分**：403 是当前 key 无权限（换 key 或申请），404/503 是网关没配后端（找网关管理员），超时是慢或非对话模型。
-- 脚本默认值硬编码了 360 网关的 key 和代理；测别的网关必须显式 `--base-url` / `--api-key` / `--proxy`，避免把 key 发错域名。
+- API key 从仓库根目录 `.env` 的 `LLM_API_KEY` 读取；base-url 和代理仍是 360 默认值，测别的网关必须显式 `--base-url` / `--proxy`，避免把 key 发错域名。
 
 ## 验证
 
