@@ -41,6 +41,7 @@ env/
 *.swp
 *.swo
 *~
+.antigravitycli/
 
 # OS
 .DS_Store
