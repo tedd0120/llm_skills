@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import threading
@@ -16,24 +17,61 @@ SPEC.loader.exec_module(RUNNER)
 
 
 class AgentCouncilRunnerTests(unittest.TestCase):
-    def test_main_report_path_must_be_fresh_and_outside_workspace(self):
+    def test_state_directory_and_blank_default_config_are_created(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_dir, config = RUNNER.ensure_state(root)
+
+            self.assertEqual(state_dir, root / ".agent-council")
+            self.assertEqual(config, state_dir / "default-models.txt")
+            self.assertTrue(state_dir.is_dir())
+            self.assertEqual(config.read_bytes(), b"")
+            self.assertEqual(RUNNER.read_default_reviewers(config), [])
+
+            config.write_text("claude:opus\n", encoding="utf-8")
+            RUNNER.ensure_state(root)
+            self.assertEqual(config.read_text(encoding="utf-8"), "claude:opus\n")
+
+    def test_default_model_config_uses_one_reviewer_per_nonblank_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "default-models.txt"
+            config.write_text(
+                "pi:openai-codex/gpt-5.6-sol\n\nclaude:opus\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                RUNNER.read_default_reviewers(config),
+                ["pi:openai-codex/gpt-5.6-sol", "claude:opus"],
+            )
+
+    def test_run_inputs_and_main_report_must_stay_inside_run_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "workspace"
             root.mkdir()
-            outside = Path(tmp) / "private" / "main.md"
-            outside.parent.mkdir()
+            state, _ = RUNNER.ensure_state(root)
+            run_dir = state / "run-1"
+            run_dir.mkdir()
+            RUNNER.prepare_run_dir(str(run_dir), state)
+            prompt = run_dir / "prompt.txt"
+            prompt.write_text("prompt", encoding="utf-8")
+            main_report = run_dir / "reports" / "main-agent.md"
 
             self.assertEqual(
-                RUNNER.prepare_main_report_path(str(outside), root),
-                outside.resolve(),
+                RUNNER.prepare_prompt_path(str(prompt), run_dir), prompt.resolve()
             )
+            self.assertEqual(
+                RUNNER.prepare_main_report_path(str(main_report), run_dir),
+                main_report.resolve(),
+            )
+            with self.assertRaisesRegex(ValueError, "inside the run directory"):
+                RUNNER.prepare_prompt_path(str(root / "prompt.txt"), run_dir)
+            with self.assertRaisesRegex(ValueError, "inside the run directory"):
+                RUNNER.prepare_main_report_path(str(root / "main.md"), run_dir)
 
-            with self.assertRaisesRegex(ValueError, "outside the workspace"):
-                RUNNER.prepare_main_report_path(str(root / "main.md"), root)
-
-            outside.write_text("stale report", encoding="utf-8")
+            main_report.write_text("stale report", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must not exist"):
-                RUNNER.prepare_main_report_path(str(outside), root)
+                RUNNER.prepare_main_report_path(str(main_report), run_dir)
 
     def test_select_reviewers_preserves_mixed_order_and_pi_substitutions(self):
         requested = [
@@ -108,30 +146,73 @@ class AgentCouncilRunnerTests(unittest.TestCase):
         self.assertEqual(disabled[-1], "")
         self.assertEqual(enabled[-1], "Read,Grep,Glob")
 
-    def test_main_report_is_created_during_calls_but_never_passed_to_reviewers(self):
+        pi_command = RUNNER.build_pi_command(
+            ["pi"], "provider/model", False, "high"
+        )
+        self.assertEqual(pi_command[-1], "--no-tools")
+
+    def test_pi_and_claude_receive_the_exact_prompt_as_stdin(self):
+        exact_prompt = "原始 prompt\r\ntrailing spaces  \r\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            for reviewer in ("pi:provider/model", "claude:opus"):
+                completed = subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="result\n", stderr=""
+                )
+                with patch.object(RUNNER.subprocess, "run", return_value=completed) as run:
+                    result = RUNNER.run_one(
+                        pi_prefix=["pi"],
+                        claude_prefix=["claude"],
+                        root=reports,
+                        reports_dir=reports,
+                        reviewer=reviewer,
+                        prompt=exact_prompt,
+                        read_tools=False,
+                        thinking="high",
+                        claude_effort="high",
+                        timeout=10,
+                        retries=0,
+                    )
+
+                self.assertTrue(result["ok"])
+                self.assertEqual(run.call_args.kwargs["input"], exact_prompt)
+                self.assertFalse(
+                    (reports / RUNNER.safe_report_name(reviewer)).exists()
+                )
+
+    def test_all_run_files_stay_in_state_and_reports_are_written_after_calls(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "workspace"
             root.mkdir()
-            brief = Path(tmp) / "brief.md"
-            brief.write_text(
-                "shared facts and evaluation dimensions", encoding="utf-8"
-            )
-            main_report = Path(tmp) / "private" / "main.md"
-            main_report.parent.mkdir()
+            state = root / ".agent-council"
+            run_dir = state / "run-1"
+            run_dir.mkdir(parents=True)
+            prompt_file = run_dir / "prompt.txt"
+            exact_prompt = "user prompt\r\nwith trailing spaces  \r\n"
+            with prompt_file.open("w", encoding="utf-8", newline="") as handle:
+                handle.write(exact_prompt)
+            main_report = run_dir / "reports" / "main-agent.md"
             secret = "MAIN_AGENT_PRIVATE_CONCLUSION_7f36"
 
             calls_started = threading.Event()
             release_calls = threading.Event()
+            calls_finished = threading.Event()
             dispatched = []
+            completed_calls = 0
+            completed_lock = threading.Lock()
 
             def fake_run_one(**kwargs):
+                nonlocal completed_calls
                 dispatched.append(dict(kwargs))
                 calls_started.set()
                 self.assertTrue(release_calls.wait(2))
                 reviewer = kwargs["reviewer"]
                 backend, model = RUNNER.parse_reviewer(reviewer)
                 output = kwargs["reports_dir"] / RUNNER.safe_report_name(reviewer)
-                output.write_text(f"# Report from {reviewer}\n", encoding="utf-8")
+                with completed_lock:
+                    completed_calls += 1
+                    if completed_calls == 2:
+                        calls_finished.set()
                 return {
                     "reviewer": reviewer,
                     "backend": backend,
@@ -140,36 +221,35 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                     "attempts": 1,
                     "seconds": 0.01,
                     "report": str(output),
+                    "_content": f"# Report from {reviewer}\n",
                 }
 
             def write_main_report():
                 self.assertTrue(calls_started.wait(2))
+                self.assertEqual(list((run_dir / "reports").iterdir()), [])
+                release_calls.set()
+                self.assertTrue(calls_finished.wait(2))
                 main_report.write_text(
                     f"# Main Agent Independent Report\n\n{secret}\n",
                     encoding="utf-8",
                 )
-                release_calls.set()
 
             writer = threading.Thread(target=write_main_report)
             writer.start()
             argv = [
                 "run_council.py",
-                "--topic",
-                "isolation test",
                 "--workspace",
                 str(root),
-                "--brief-file",
-                str(brief),
+                "--run-dir",
+                str(run_dir),
+                "--prompt-file",
+                str(prompt_file),
                 "--main-report-file",
                 str(main_report),
                 "--reviewer",
                 "pi:provider-a/model-a",
                 "--reviewer",
                 "claude:opus",
-                "--focus",
-                "focus a",
-                "--focus",
-                "focus b",
             ]
             stdout = io.StringIO()
             with (
@@ -197,10 +277,8 @@ class AgentCouncilRunnerTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(len(dispatched), 2)
             for call in dispatched:
-                self.assertEqual(
-                    call["brief"], brief.read_text(encoding="utf-8")
-                )
-                self.assertNotIn(secret, call["brief"])
+                self.assertEqual(call["prompt"], exact_prompt)
+                self.assertNotIn(secret, call["prompt"])
                 self.assertNotIn("main_report", call)
 
             summary = json.loads(stdout.getvalue().splitlines()[-1])
@@ -214,6 +292,19 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                 summary["successful_reviewers"],
                 ["pi:provider-a/model-a", "claude:opus"],
             )
+            self.assertEqual(summary["available_pi_models"], ["provider-a/model-a"])
+            self.assertEqual(summary["default_models"], [])
+            self.assertFalse((run_dir / "report.md").exists())
+            self.assertEqual(
+                {path.name for path in (run_dir / "reports").iterdir()},
+                {
+                    "main-agent.md",
+                    "pi_provider-a_model-a.md",
+                    "claude_opus.md",
+                },
+            )
+            for path in run_dir.rglob("*"):
+                self.assertTrue(path.resolve().is_relative_to(state.resolve()))
 
 
 if __name__ == "__main__":
