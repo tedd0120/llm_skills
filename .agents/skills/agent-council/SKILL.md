@@ -1,15 +1,17 @@
 ---
 name: agent-council
-description: 通过 Pi CLI 与 Claude CLI 将用户原始 prompt 原样交给多个模型和主 Agent 独立完成并保存报告；收到用户下一条 prompt 后再按要求处理这些本地报告。
+description: 通过 Pi CLI 与 Claude CLI 将用户任务 prompt 原样交给多个模型和主 Agent 独立完成并保存报告；收到用户下一条 prompt 后再按要求处理这些本地报告。
 ---
 
 # Agent 会审（Agent Council）
 
 第一阶段让主 Agent、Pi 与 Claude 独立完成同一条 user prompt，并保存各自的原始报告。收到用户下一条 prompt 后，再按该指令处理这些报告。
 
-## Prompt 原样传递
+## 任务 prompt 原样传递
 
-将触发本技能的当前 user prompt 逐字写入本次 `.agent-council/<run>/prompt.txt`，并将该文件的完整内容作为每个 Pi 或 Claude 调用的 stdin。保持字符、换行、顺序和尾随空白不变。CLI 参数限定为模型、工具和运行方式的现有选项。
+技能调用标记只负责路由。先从当前 user prompt 开头移除 `$agent-council` 或 Codex 展开的 `[$agent-council](.../SKILL.md)`，将余下的用户任务逐字写入本次 `.agent-council/<run>/prompt.txt`。runner 会拒绝仍带调用标记的文件。
+
+将 `prompt.txt` 的完整内容作为每个 Pi 或 Claude 调用的 stdin，保持字符、换行、顺序和尾随空白。CLI 参数限定为模型、工具和运行方式的现有选项。
 
 若用户原文依赖当前 prompt 之外的早先上下文，说明缺失内容并请用户给出一条自包含 prompt，收到后再调用模型。
 
@@ -63,12 +65,15 @@ python <skill-dir>/scripts/run_council.py \
 - `--claude-effort <level>`：Claude effort，默认 `high`。
 - `--max-parallel <n>`：最大并发数，默认 `5`。
 - `--read-tools`：仅当用户 prompt 明确要求 reviewer 读取工作区文件时启用。Pi 获得 `read,grep,find,ls`，Claude 获得 `Read,Grep,Glob`。
+- `--web-tools`：当用户任务要求访问 URL 或检索网络资料时启用。runner 实际执行 `pi list` 定位已安装的 `pi-web-access`，为 Pi 开放 `web_search,source_check,fetch_content,get_search_content`；Claude 开放 `WebFetch` 并使用 `auto` 权限模式。Pi 扩展缓存、仓库克隆以及 Claude 与 Pi 的系统临时目录位于本次 `<run-dir>/`。
 
 至少请求两个 reviewer。Pi 模型必须出现在本次 `pi --list-models` 输出中；runner 可在同一 provider 内按既定优先级替换不可用模型，并如实披露替换。Claude 模型由 Claude CLI 调用时校验。每次尝试默认超时 3600 秒，失败重试一次。
 
+runner 使用 Pi JSONL 与 Claude JSON 读取终止状态。只有正常结束且包含最终回答的调用记为成功；长度上限、未完成工具调用、空回答和结构化输出错误进入重试。重试仍失败时，报告保留完整原始 stdout 与 stderr。
+
 后台启动 runner。确认 reviewer 调用开始后，主 Agent 立即独立完成用户原始任务，并将完整结果暂时保留在自身上下文中。runner 提示全部 reviewer 调用完成后，主 Agent 在读取 reviewer 输出前把结果一次性写入 `--main-report-file`，视为冻结。
 
-Pi 调用通过 CLI 参数关闭会话、扩展、技能、prompt 模板和上下文文件。Claude 调用通过 CLI 参数启用安全模式并关闭会话持久化、slash commands、项目技能、插件、hooks、MCP 与 `CLAUDE.md` 自动发现。
+Pi 调用通过 CLI 参数关闭会话、自动扩展发现、技能、prompt 模板和上下文文件；启用 `--web-tools` 时只显式加载 `pi-web-access`。Claude 调用通过 CLI 参数启用安全模式并关闭会话持久化、slash commands、项目技能、插件、hooks、MCP 与 `CLAUDE.md` 自动发现；联网任务只开放 `WebFetch`，本地任务按需开放 `Read,Grep,Glob`。
 
 runner 校验 `<run-dir>` 是 `.agent-council/` 的直接子目录，并校验 prompt 与主 Agent 报告路径都在本次目录内。reviewer 调用期间，runner 只在进程内存中保留各模型输出；全部调用结束后才统一写入 `<run-dir>/reports/`。主 Agent 此后再写自己的报告。stdout 最后一行是 JSON 摘要：
 

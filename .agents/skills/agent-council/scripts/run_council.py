@@ -92,6 +92,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--web-tools",
+        action="store_true",
+        help=(
+            "Load pi-web-access for Pi reviewers and allow WebFetch for Claude "
+            "reviewers."
+        ),
+    )
+    parser.add_argument(
         "--thinking",
         default="high",
         help=(
@@ -182,6 +190,19 @@ def read_utf8_exact(path_text: str, label: str) -> str:
     if not value.strip():
         raise ValueError(f"{label} is empty: {path}")
     return value
+
+
+SKILL_INVOCATION = re.compile(
+    r"^(?:\[\$agent-council\]\([^\r\n]*\)|\$agent-council)(?:[ \t]+|(?=\r?$))",
+    re.IGNORECASE,
+)
+
+
+def validate_task_prompt(prompt: str) -> None:
+    if SKILL_INVOCATION.match(prompt):
+        raise ValueError(
+            "prompt file starts with the agent-council routing marker; write only the user task"
+        )
 
 
 def require_inside_run(path: Path, run_dir: Path, label: str) -> None:
@@ -384,6 +405,37 @@ def list_models(pi_prefix: Sequence[str], root: Path) -> list[str]:
     return found
 
 
+def resolve_pi_web_extension(pi_prefix: Sequence[str], root: Path) -> Path:
+    process = subprocess.run(
+        [*pi_prefix, "list"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+        check=False,
+    )
+    if process.returncode != 0:
+        detail = (process.stderr or process.stdout).strip()
+        raise ValueError(f"`pi list` failed: {detail or 'no error output'}")
+
+    lines = process.stdout.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() != "npm:pi-web-access":
+            continue
+        for path_line in lines[index + 1 :]:
+            if path_line.strip().startswith("npm:"):
+                break
+            if not path_line.strip():
+                continue
+            candidate = Path(path_line.strip()).expanduser().resolve() / "index.ts"
+            if candidate.is_file():
+                return candidate
+            break
+    raise ValueError("Pi package pi-web-access is not installed")
+
+
 def select_models(
     requested: Sequence[str], available: Sequence[str]
 ) -> tuple[list[tuple[str, str]], list[str]]:
@@ -484,11 +536,17 @@ def truncate_error(text: str, limit: int = SUMMARY_ERROR_LIMIT) -> str:
 
 
 def build_pi_command(
-    pi_prefix: Sequence[str], model: str, read_tools: bool, thinking: str
+    pi_prefix: Sequence[str],
+    model: str,
+    read_tools: bool,
+    thinking: str,
+    web_extension: Path | None = None,
 ) -> list[str]:
     command = [
         *pi_prefix,
         "-p",
+        "--mode",
+        "json",
         "--no-session",
         "--model",
         model,
@@ -499,19 +557,34 @@ def build_pi_command(
         "--no-prompt-templates",
         "--no-context-files",
     ]
-    if read_tools:
-        command.extend(["--tools", "read,grep,find,ls"])
+    tools = ["read", "grep", "find", "ls"] if read_tools else []
+    if web_extension:
+        command.extend(["--extension", str(web_extension)])
+        tools.extend(
+            ["web_search", "source_check", "fetch_content", "get_search_content"]
+        )
+    if tools:
+        command.extend(["--tools", ",".join(tools)])
     else:
         command.append("--no-tools")
     return command
 
 
 def build_claude_command(
-    claude_prefix: Sequence[str], model: str, read_tools: bool, effort: str
+    claude_prefix: Sequence[str],
+    model: str,
+    read_tools: bool,
+    web_tools: bool,
+    effort: str,
 ) -> list[str]:
+    tools = ["Read", "Grep", "Glob"] if read_tools else []
+    if web_tools:
+        tools.append("WebFetch")
     return [
         *claude_prefix,
         "--print",
+        "--output-format",
+        "json",
         "--model",
         model,
         "--effort",
@@ -523,10 +596,109 @@ def build_claude_command(
         "--mcp-config",
         '{"mcpServers":{}}',
         "--permission-mode",
-        "dontAsk",
+        "auto" if web_tools else "dontAsk",
         "--tools",
-        "Read,Grep,Glob" if read_tools else "",
+        ",".join(tools),
     ]
+
+
+def parse_pi_result(raw: str) -> str:
+    events = []
+    try:
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Pi returned invalid JSONL: {exc}") from exc
+    agent_end = next(
+        (event for event in reversed(events) if event.get("type") == "agent_end"),
+        None,
+    )
+    if not agent_end:
+        raise ValueError("Pi response has no agent_end event")
+    assistants = [
+        message
+        for message in agent_end.get("messages", [])
+        if message.get("role") == "assistant"
+    ]
+    if not assistants:
+        raise ValueError("Pi response has no assistant message")
+    final = assistants[-1]
+    stop_reason = final.get("stopReason")
+    if stop_reason != "stop":
+        raise ValueError(f"Pi response ended with stopReason={stop_reason!r}")
+    text_parts = [
+        item.get("text", "")
+        for item in final.get("content", [])
+        if item.get("type") == "text"
+    ]
+    result = "".join(text_parts)
+    if not result.strip():
+        raise ValueError("Pi final response is empty")
+    return result
+
+
+def parse_claude_result(raw: str) -> str:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Claude returned invalid JSON: {exc}") from exc
+    if (
+        payload.get("is_error")
+        or payload.get("subtype") != "success"
+        or payload.get("terminal_reason") != "completed"
+        or payload.get("stop_reason") != "end_turn"
+    ):
+        raise ValueError(
+            "Claude response ended incompletely: "
+            f"subtype={payload.get('subtype')!r}, "
+            f"terminal_reason={payload.get('terminal_reason')!r}, "
+            f"stop_reason={payload.get('stop_reason')!r}"
+        )
+    result = payload.get("result", "")
+    if not isinstance(result, str) or not result.strip():
+        raise ValueError("Claude final response is empty")
+    return result
+
+
+def prepare_pi_web_environment(run_dir: Path, reviewer: str) -> dict[str, str]:
+    web_state = run_dir / "pi-web" / safe_report_name(reviewer)[:-3]
+    config_dir = web_state / "pi"
+    temp_dir = web_state / "tmp"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(exist_ok=True)
+    (config_dir / "web-search.json").write_text(
+        json.dumps(
+            {
+                "workflow": "none",
+                "githubClone": {"clonePath": str(web_state / "github-repos")},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    process_env = os.environ.copy()
+    process_env.update(
+        {
+            "XDG_CONFIG_HOME": str(web_state),
+            "TEMP": str(temp_dir),
+            "TMP": str(temp_dir),
+            "TMPDIR": str(temp_dir),
+        }
+    )
+    return process_env
+
+
+def prepare_claude_environment(run_dir: Path, reviewer: str) -> dict[str, str]:
+    temp_dir = run_dir / "claude-temp" / safe_report_name(reviewer)[:-3]
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    process_env = os.environ.copy()
+    process_env.update(
+        {
+            "TEMP": str(temp_dir),
+            "TMP": str(temp_dir),
+            "TMPDIR": str(temp_dir),
+        }
+    )
+    return process_env
 
 
 def run_one(
@@ -538,6 +710,8 @@ def run_one(
     reviewer: str,
     prompt: str,
     read_tools: bool,
+    web_tools: bool,
+    web_extension: Path | None,
     thinking: str,
     claude_effort: str,
     timeout: int,
@@ -547,12 +721,14 @@ def run_one(
     if backend == "pi":
         if pi_prefix is None:
             raise ValueError("Pi command was not resolved")
-        command = build_pi_command(pi_prefix, model, read_tools, thinking)
+        command = build_pi_command(
+            pi_prefix, model, read_tools, thinking, web_extension
+        )
     else:
         if claude_prefix is None:
             raise ValueError("Claude command was not resolved")
         command = build_claude_command(
-            claude_prefix, model, read_tools, claude_effort
+            claude_prefix, model, read_tools, web_tools, claude_effort
         )
     output_path = reports_dir / safe_report_name(reviewer)
     errors: list[str] = []
@@ -560,10 +736,20 @@ def run_one(
 
     for attempt in range(1, retries + 2):
         try:
+            process_env = None
+            if backend == "pi" and web_extension:
+                process_env = prepare_pi_web_environment(
+                    reports_dir.parent, reviewer
+                )
+            elif backend == "claude":
+                process_env = prepare_claude_environment(
+                    reports_dir.parent, reviewer
+                )
             process = subprocess.run(
                 command,
                 cwd=root,
                 input=prompt,
+                env=process_env,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -579,6 +765,18 @@ def run_one(
             stdout = process.stdout or ""
             stderr = process.stderr or ""
             if process.returncode == 0 and stdout.strip():
+                try:
+                    content = (
+                        parse_pi_result(stdout)
+                        if backend == "pi"
+                        else parse_claude_result(stdout)
+                    )
+                except ValueError as exc:
+                    errors.append(
+                        f"Attempt {attempt}: {exc}; raw stdout={stdout}; "
+                        f"stderr={stderr.strip() or '<empty>'}"
+                    )
+                    continue
                 return {
                     "reviewer": reviewer,
                     "backend": backend,
@@ -587,7 +785,7 @@ def run_one(
                     "attempts": attempt,
                     "seconds": round(time.monotonic() - started, 2),
                     "report": str(output_path),
-                    "_content": stdout,
+                    "_content": content,
                 }
             errors.append(
                 f"Attempt {attempt}: exit={process.returncode}; "
@@ -643,6 +841,7 @@ def write_input(
     roster: Sequence[tuple[str, str]],
     selection_failures: Sequence[str],
     read_tools: bool,
+    web_tools: bool,
     thinking: str,
     claude_effort: str,
     timeout: int,
@@ -677,6 +876,7 @@ def write_input(
 - Pi thinking: `{thinking}`
 - Claude effort: `{claude_effort}`
 - File tools: `{"Pi read,grep,find,ls; Claude Read,Grep,Glob" if read_tools else "disabled"}`
+- Web tools: `{"Pi web_search,source_check,fetch_content,get_search_content; Claude WebFetch" if web_tools else "disabled"}`
 - Per-attempt timeout: `{timeout}s`
 - Retries after first attempt: `{retries}`
 - Main-agent report: `{"reports/main-agent.md" if main_report_recorded else "not collected"}`
@@ -743,6 +943,7 @@ def main() -> int:
     config_path: Path | None = None
     default_reviewers: list[str] = []
     available_pi_models: list[str] = []
+    web_extension: Path | None = None
 
     try:
         root, is_git = resolve_workspace(args.workspace)
@@ -787,9 +988,16 @@ def main() -> int:
         run_dir = prepare_run_dir(args.run_dir, state_dir)
         prompt_path = prepare_prompt_path(args.prompt_file, run_dir)
         prompt = read_utf8_exact(str(prompt_path), "prompt file")
+        validate_task_prompt(prompt)
         main_report_path = prepare_main_report_path(args.main_report_file, run_dir)
 
         requested_backends = {parse_reviewer(item)[0] for item in requested}
+        if args.web_tools and "pi" in requested_backends:
+            if pi_prefix is None:
+                raise ValueError(
+                    f"Pi web tools require an available Pi CLI: {backend_failures.get('pi')}"
+                )
+            web_extension = resolve_pi_web_extension(pi_prefix, root)
         if "claude" in requested_backends:
             try:
                 claude_prefix = resolve_claude_command(args.claude_command)
@@ -810,6 +1018,7 @@ def main() -> int:
                 roster=roster,
                 selection_failures=selection_failures,
                 read_tools=args.read_tools,
+                web_tools=args.web_tools,
                 thinking=args.thinking,
                 claude_effort=args.claude_effort,
                 timeout=args.timeout,
@@ -850,6 +1059,8 @@ def main() -> int:
                     reviewer=actual,
                     prompt=prompt,
                     read_tools=args.read_tools,
+                    web_tools=args.web_tools,
+                    web_extension=web_extension,
                     thinking=args.thinking,
                     claude_effort=args.claude_effort,
                     timeout=args.timeout,
@@ -893,6 +1104,7 @@ def main() -> int:
             roster=roster,
             selection_failures=selection_failures,
             read_tools=args.read_tools,
+            web_tools=args.web_tools,
             thinking=args.thinking,
             claude_effort=args.claude_effort,
             timeout=args.timeout,

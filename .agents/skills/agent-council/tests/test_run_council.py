@@ -17,6 +17,34 @@ SPEC.loader.exec_module(RUNNER)
 
 
 class AgentCouncilRunnerTests(unittest.TestCase):
+    @staticmethod
+    def pi_json(result="result\n", stop_reason="stop"):
+        return json.dumps(
+            {
+                "type": "agent_end",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": result}],
+                        "stopReason": stop_reason,
+                    }
+                ],
+            }
+        )
+
+    @staticmethod
+    def claude_json(result="result\n", stop_reason="end_turn"):
+        return json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "terminal_reason": "completed",
+                "stop_reason": stop_reason,
+                "result": result,
+            }
+        )
+
     def test_state_directory_and_blank_default_config_are_created(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -128,36 +156,115 @@ class AgentCouncilRunnerTests(unittest.TestCase):
 
     def test_claude_command_is_nonpersistent_and_read_only_when_enabled(self):
         disabled = RUNNER.build_claude_command(
-            ["claude"], "opus", False, "high"
+            ["claude"], "opus", False, False, "high"
         )
-        enabled = RUNNER.build_claude_command(
-            ["claude"], "opus", True, "high"
+        read_enabled = RUNNER.build_claude_command(
+            ["claude"], "opus", True, False, "high"
+        )
+        web_enabled = RUNNER.build_claude_command(
+            ["claude"], "opus", False, True, "high"
+        )
+        both_enabled = RUNNER.build_claude_command(
+            ["claude"], "opus", True, True, "high"
         )
 
-        for command in (disabled, enabled):
+        for command in (disabled, read_enabled, web_enabled, both_enabled):
+            self.assertEqual(command[command.index("--output-format") + 1], "json")
             self.assertIn("--safe-mode", command)
             self.assertIn("--no-session-persistence", command)
             self.assertIn("--disable-slash-commands", command)
             self.assertIn("--strict-mcp-config", command)
-            self.assertIn("dontAsk", command)
             # The CLI rejects a bare "{}" — the object must carry mcpServers.
             mcp_config = command[command.index("--mcp-config") + 1]
             self.assertEqual(json.loads(mcp_config), {"mcpServers": {}})
         self.assertEqual(disabled[-1], "")
-        self.assertEqual(enabled[-1], "Read,Grep,Glob")
+        self.assertEqual(read_enabled[-1], "Read,Grep,Glob")
+        self.assertEqual(web_enabled[-1], "WebFetch")
+        self.assertEqual(both_enabled[-1], "Read,Grep,Glob,WebFetch")
+        self.assertIn("dontAsk", disabled)
+        self.assertIn("dontAsk", read_enabled)
+        self.assertIn("auto", web_enabled)
+        self.assertIn("auto", both_enabled)
 
         pi_command = RUNNER.build_pi_command(
             ["pi"], "provider/model", False, "high"
         )
+        self.assertEqual(pi_command[pi_command.index("--mode") + 1], "json")
         self.assertEqual(pi_command[-1], "--no-tools")
+
+        web_extension = Path("pi-web-access/index.ts")
+        web_command = RUNNER.build_pi_command(
+            ["pi"], "provider/model", False, "high", web_extension
+        )
+        self.assertEqual(
+            web_command[web_command.index("--extension") + 1], str(web_extension)
+        )
+        self.assertIn("fetch_content", web_command[-1])
+
+    def test_routing_marker_is_rejected_from_task_prompt(self):
+        RUNNER.validate_task_prompt("总结这个仓库")
+        with self.assertRaisesRegex(ValueError, "routing marker"):
+            RUNNER.validate_task_prompt(
+                "[$agent-council](P:\\repo\\SKILL.md) 总结这个仓库"
+            )
+
+    def test_structured_results_require_complete_model_turns(self):
+        self.assertEqual(RUNNER.parse_pi_result(self.pi_json("完整回答")), "完整回答")
+        self.assertEqual(
+            RUNNER.parse_claude_result(self.claude_json("完整回答")), "完整回答"
+        )
+        with self.assertRaisesRegex(ValueError, "stopReason='length'"):
+            RUNNER.parse_pi_result(self.pi_json("半截", "length"))
+        with self.assertRaisesRegex(ValueError, "stop_reason='max_tokens'"):
+            RUNNER.parse_claude_result(self.claude_json("半截", "max_tokens"))
+
+    def test_pi_web_temporary_paths_stay_inside_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / ".agent-council" / "run-1"
+            run_dir.mkdir(parents=True)
+            environment = RUNNER.prepare_pi_web_environment(
+                run_dir, "pi:provider/model"
+            )
+
+            for name in ("XDG_CONFIG_HOME", "TEMP", "TMP", "TMPDIR"):
+                self.assertTrue(
+                    Path(environment[name]).resolve().is_relative_to(run_dir.resolve())
+                )
+            config = json.loads(
+                (Path(environment["XDG_CONFIG_HOME"]) / "pi" / "web-search.json")
+                .read_text(encoding="utf-8")
+            )
+            self.assertTrue(
+                Path(config["githubClone"]["clonePath"])
+                .resolve()
+                .is_relative_to(run_dir.resolve())
+            )
+
+    def test_claude_temporary_paths_stay_inside_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / ".agent-council" / "run-1"
+            run_dir.mkdir(parents=True)
+            environment = RUNNER.prepare_claude_environment(
+                run_dir, "claude:opus"
+            )
+
+            for name in ("TEMP", "TMP", "TMPDIR"):
+                self.assertTrue(
+                    Path(environment[name]).resolve().is_relative_to(run_dir.resolve())
+                )
 
     def test_pi_and_claude_receive_the_exact_prompt_as_stdin(self):
         exact_prompt = "原始 prompt\r\ntrailing spaces  \r\n"
         with tempfile.TemporaryDirectory() as tmp:
             reports = Path(tmp)
             for reviewer in ("pi:provider/model", "claude:opus"):
+                stdout = (
+                    self.pi_json()
+                    if reviewer.startswith("pi:")
+                    else self.claude_json()
+                )
                 completed = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="result\n", stderr=""
+                    args=[], returncode=0, stdout=stdout, stderr=""
                 )
                 with patch.object(RUNNER.subprocess, "run", return_value=completed) as run:
                     result = RUNNER.run_one(
@@ -168,6 +275,8 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                         reviewer=reviewer,
                         prompt=exact_prompt,
                         read_tools=False,
+                        web_tools=False,
+                        web_extension=None,
                         thinking="high",
                         claude_effort="high",
                         timeout=10,
@@ -280,6 +389,7 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                 self.assertEqual(call["prompt"], exact_prompt)
                 self.assertNotIn(secret, call["prompt"])
                 self.assertNotIn("main_report", call)
+                self.assertIsNone(call["web_extension"])
 
             summary = json.loads(stdout.getvalue().splitlines()[-1])
             recorded = Path(summary["main_agent_report"])

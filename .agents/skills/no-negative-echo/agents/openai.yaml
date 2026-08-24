@@ -1,0 +1,7 @@
+interface:
+  display_name: "No Negative Echo"
+  short_description: "在多轮纠正后，从最终状态生成准确、面向读者的完整交付叙述"
+  default_prompt: "Use $no-negative-echo to finalize every user-facing surface from the accepted result."
+
+policy:
+  allow_implicit_invocation: true
