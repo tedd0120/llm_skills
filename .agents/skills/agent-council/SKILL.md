@@ -76,7 +76,7 @@ python <skill-dir>/scripts/run_council.py \
 - `--thinking <level>`：Pi thinking，默认 `high`。
 - `--claude-effort <level>`：Claude effort，默认 `high`。
 - `--max-parallel <n>`：最大并发数，默认 `5`。
-- `--web-tools`：当用户任务要求访问 URL 或检索网络资料时启用。runner 实际执行 `pi list` 定位已安装的 `pi-web-access`，为 Pi 开放 `web_search,source_check,fetch_content,get_search_content`；Claude 开放 `WebFetch` 并使用 `auto` 权限模式。Pi 扩展缓存、仓库克隆以及 Claude 与 Pi 的系统临时目录位于本次 `<run-dir>/`。
+- `--web-tools`：当用户任务要求访问 URL 或检索网络资料时启用。runner 实际执行 `pi list` 定位已安装的 `pi-web-access`，为 Pi 开放 `web_search,source_check,fetch_content,get_search_content`；Claude 授权 `WebFetch,WebSearch`。Pi 扩展缓存、仓库克隆以及 Claude 与 Pi 的系统临时目录位于本次 `<run-dir>/`。
 
 至少请求两个 reviewer。Pi 模型必须出现在本次 `pi --list-models` 输出中；runner 可在同一 provider 内按既定优先级替换不可用模型，并如实披露替换。Claude 模型由 Claude CLI 调用时校验。每次尝试默认超时 3600 秒，失败重试一次。
 
@@ -86,7 +86,11 @@ runner 使用 Pi JSONL 与 Claude JSON 读取终止状态。只有正常结束�
 
 后台启动 runner。确认 reviewer 调用开始后，主 Agent 立即独立完成用户原始任务，并将完整结果暂时保留在自身上下文中。runner 提示全部 reviewer 调用完成后，主 Agent 在读取 reviewer 输出前把结果一次性写入 `--main-report-file`，视为冻结。
 
-Pi 调用始终开放 `read,grep,find,ls`，并通过 CLI 参数关闭会话、自动扩展发现、技能、prompt 模板和上下文文件；启用 `--web-tools` 时只显式加载 `pi-web-access`。Claude 调用始终开放 `Read,Grep,Glob`，使用独立 reviewer system prompt 只输出完整答案，不模拟或转录工具调用。CLI 参数同时启用安全模式并关闭会话持久化、slash commands、项目技能、插件、hooks、MCP 与 `CLAUDE.md` 自动发现；联网任务另外开放 `WebFetch`。
+Pi 调用始终开放 `read,grep,find,ls`，并通过 CLI 参数关闭会话、自动扩展发现、技能、prompt 模板和上下文文件；启用 `--web-tools` 时只显式加载 `pi-web-access`。Claude 使用默认内置工具集，但以 `dontAsk` 权限模式显式拒绝 `Write`、`Edit`、`MultiEdit` 与 `NotebookEdit`，通用 Bash 不获授权。runner 只放行只读 Git 命令，并拒绝文件输出、外部 diff 与 textconv 参数；Claude 环境同时关闭 Git 可选锁与 pager。启用 `--web-tools` 时另外授权 `WebFetch` 与 `WebSearch`。
+
+prompt 中形如 `[$skill-name](<本地路径/SKILL.md>)` 的显式本地 skill 链接会在 runner 启动时解析。文件必须存在且可读；runner 将其父目录通过 `--add-dir` 授权给 Claude。该机制只扩展读取范围，不启用 Claude 的技能发现，也不授予目录写权限。
+
+Claude 使用独立 reviewer system prompt 只输出完整答案，不模拟或转录工具调用。CLI 参数同时启用安全模式并关闭会话持久化、slash commands、项目技能、插件、hooks、MCP 与 `CLAUDE.md` 自动发现。
 
 runner 校验 `<run-dir>` 是 `.agent-council/` 的直接子目录，并校验 prompt 与主 Agent 报告路径都在本次目录内。reviewer 调用期间，runner 只在进程内存中保留各模型输出；全部调用结束后才统一写入 `<run-dir>/reports/`。主 Agent 此后再写自己的报告。stdout 最后一行是 JSON 摘要：
 

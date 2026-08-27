@@ -198,11 +198,12 @@ class AgentCouncilRunnerTests(unittest.TestCase):
         )
 
     def test_claude_command_is_nonpersistent_and_read_only_when_enabled(self):
+        skill_dir = Path("C:/skills/git-weekly-summary")
         disabled = RUNNER.build_claude_command(
             ["claude"], "opus", False, False, "high"
         )
         read_enabled = RUNNER.build_claude_command(
-            ["claude"], "opus", True, False, "high"
+            ["claude"], "opus", True, False, "high", [skill_dir]
         )
         web_enabled = RUNNER.build_claude_command(
             ["claude"], "opus", False, True, "high"
@@ -225,18 +226,27 @@ class AgentCouncilRunnerTests(unittest.TestCase):
             mcp_config = command[command.index("--mcp-config") + 1]
             self.assertEqual(json.loads(mcp_config), {"mcpServers": {}})
         self.assertEqual(disabled[disabled.index("--tools") + 1], "")
+        for command in (read_enabled, web_enabled, both_enabled):
+            self.assertEqual(command[command.index("--tools") + 1], "default")
+        allowed = read_enabled[read_enabled.index("--allowedTools") + 1]
+        self.assertIn("Read", allowed)
+        self.assertIn("Bash(git log *)", allowed)
+        self.assertNotIn("Bash(git clean *)", allowed)
+        denied = read_enabled[read_enabled.index("--disallowedTools") + 1]
+        self.assertIn("Write", denied)
+        self.assertIn("Bash(git *--output*)", denied)
+        self.assertNotIn("Bash(git branch *)", allowed)
+        self.assertIn("Bash(git branch --show-current)", allowed)
         self.assertEqual(
-            read_enabled[read_enabled.index("--tools") + 1], "Read,Grep,Glob"
-        )
-        self.assertEqual(web_enabled[web_enabled.index("--tools") + 1], "WebFetch")
-        self.assertEqual(
-            both_enabled[both_enabled.index("--tools") + 1],
-            "Read,Grep,Glob,WebFetch",
+            read_enabled[read_enabled.index("--add-dir") + 1], str(skill_dir)
         )
         self.assertIn("dontAsk", disabled)
         self.assertIn("dontAsk", read_enabled)
-        self.assertIn("auto", web_enabled)
-        self.assertIn("auto", both_enabled)
+        self.assertIn("dontAsk", web_enabled)
+        self.assertIn("dontAsk", both_enabled)
+        self.assertIn(
+            "WebSearch", web_enabled[web_enabled.index("--allowedTools") + 1]
+        )
 
         pi_command = RUNNER.build_pi_command(
             ["pi"], "provider/model", False, "high"
@@ -259,6 +269,24 @@ class AgentCouncilRunnerTests(unittest.TestCase):
             RUNNER.validate_task_prompt(
                 "[$agent-council](P:\\repo\\SKILL.md) 总结这个仓库"
             )
+
+    def test_linked_local_skill_directories_are_resolved_for_claude(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skill_dir = Path(tmp) / "skill with spaces"
+            skill_dir.mkdir()
+            skill_file = skill_dir / "SKILL.md"
+            skill_file.write_text("# Skill\n", encoding="utf-8")
+            prompt = f"[$example](<{skill_file}>) 完成任务"
+
+            self.assertEqual(RUNNER.resolve_prompt_skill_dirs(prompt), [skill_dir])
+            self.assertEqual(
+                RUNNER.resolve_prompt_skill_dirs(f"[$example]\\({skill_file})"),
+                [skill_dir],
+            )
+
+            missing = skill_dir / "missing" / "SKILL.md"
+            with self.assertRaisesRegex(ValueError, "linked skill file"):
+                RUNNER.resolve_prompt_skill_dirs(f"[$missing]({missing})")
 
     def test_structured_results_require_complete_model_turns(self):
         self.assertEqual(RUNNER.parse_pi_result(self.pi_json("完整回答")), "完整回答")
@@ -304,6 +332,8 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                 self.assertTrue(
                     Path(environment[name]).resolve().is_relative_to(run_dir.resolve())
                 )
+            self.assertEqual(environment["GIT_OPTIONAL_LOCKS"], "0")
+            self.assertEqual(environment["GIT_PAGER"], "cat")
 
     def test_pi_and_claude_receive_the_exact_prompt_as_stdin(self):
         exact_prompt = "原始 prompt\r\ntrailing spaces  \r\n"
@@ -331,6 +361,7 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                         web_extension=None,
                         thinking="high",
                         claude_effort="high",
+                        claude_read_dirs=[],
                         timeout=10,
                         retries=0,
                     )

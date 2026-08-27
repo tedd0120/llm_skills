@@ -54,6 +54,46 @@ CLAUDE_REVIEWER_SYSTEM_PROMPT = (
     "is not a final answer."
 )
 
+CLAUDE_DENIED_TOOLS = [
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit",
+    "Bash(git *--output*)",
+    "Bash(git *--ext-diff*)",
+    "Bash(git *--textconv*)",
+]
+CLAUDE_READ_ONLY_GIT_COMMANDS = [
+    "cat-file",
+    "describe",
+    "diff",
+    "for-each-ref",
+    "log",
+    "ls-files",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "status",
+]
+CLAUDE_READ_ONLY_GIT_RULES = [
+    "Bash(git branch)",
+    "Bash(git branch --show-current)",
+    "Bash(git branch --list *)",
+    "Bash(git branch --contains *)",
+    "Bash(git branch --no-contains *)",
+    "Bash(git branch --merged *)",
+    "Bash(git branch --no-merged *)",
+    "Bash(git tag)",
+    "Bash(git tag --list *)",
+    "Bash(git tag --contains *)",
+    "Bash(git tag --no-contains *)",
+    "Bash(git tag --points-at *)",
+]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -222,6 +262,31 @@ def validate_task_prompt(prompt: str) -> None:
         raise ValueError(
             "prompt file starts with the agent-council routing marker; write only the user task"
         )
+
+
+LOCAL_SKILL_LINK = re.compile(
+    r"\[\$[A-Za-z0-9._-]+\]\\?\((?:<([^>\r\n]+)>|([^\r\n)]+))\)",
+    re.IGNORECASE,
+)
+
+
+def resolve_prompt_skill_dirs(prompt: str) -> list[Path]:
+    """Resolve local skill directories that the user explicitly linked."""
+    found: list[Path] = []
+    for match in LOCAL_SKILL_LINK.finditer(prompt):
+        target = (match.group(1) or match.group(2)).strip()
+        path = Path(target).expanduser()
+        if path.name.lower() != "skill.md":
+            continue
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"linked skill file is not readable: {path}: {exc}") from exc
+        if not resolved.is_file():
+            raise ValueError(f"linked skill path is not a file: {resolved}")
+        if resolved.parent not in found:
+            found.append(resolved.parent)
+    return found
 
 
 def require_inside_run(path: Path, run_dir: Path, label: str) -> None:
@@ -625,11 +690,18 @@ def build_claude_command(
     read_tools: bool,
     web_tools: bool,
     effort: str,
+    read_dirs: Sequence[Path] = (),
 ) -> list[str]:
-    tools = ["Read", "Grep", "Glob"] if read_tools else []
+    allowed_tools = ["Read", "Grep", "Glob"] if read_tools else []
+    if read_tools:
+        for subcommand in CLAUDE_READ_ONLY_GIT_COMMANDS:
+            allowed_tools.extend(
+                [f"Bash(git {subcommand})", f"Bash(git {subcommand} *)"]
+            )
+        allowed_tools.extend(CLAUDE_READ_ONLY_GIT_RULES)
     if web_tools:
-        tools.append("WebFetch")
-    return [
+        allowed_tools.extend(["WebFetch", "WebSearch"])
+    command = [
         *claude_prefix,
         "--print",
         "--output-format",
@@ -645,12 +717,19 @@ def build_claude_command(
         "--mcp-config",
         '{"mcpServers":{}}',
         "--permission-mode",
-        "auto" if web_tools else "dontAsk",
+        "dontAsk",
         "--tools",
-        ",".join(tools),
+        "default" if allowed_tools else "",
+        "--allowedTools",
+        ",".join(allowed_tools),
+        "--disallowedTools",
+        ",".join(CLAUDE_DENIED_TOOLS),
         "--system-prompt",
         CLAUDE_REVIEWER_SYSTEM_PROMPT,
     ]
+    for directory in read_dirs:
+        command.extend(["--add-dir", str(directory)])
+    return command
 
 
 def parse_pi_result(raw: str) -> str:
@@ -742,8 +821,12 @@ def prepare_claude_environment(run_dir: Path, reviewer: str) -> dict[str, str]:
     temp_dir = run_dir / "claude-temp" / safe_report_name(reviewer)[:-3]
     temp_dir.mkdir(parents=True, exist_ok=True)
     process_env = os.environ.copy()
+    process_env.pop("GIT_EXTERNAL_DIFF", None)
+    process_env.pop("GIT_DIFF_OPTS", None)
     process_env.update(
         {
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_PAGER": "cat",
             "TEMP": str(temp_dir),
             "TMP": str(temp_dir),
             "TMPDIR": str(temp_dir),
@@ -765,6 +848,7 @@ def run_one(
     web_extension: Path | None,
     thinking: str,
     claude_effort: str,
+    claude_read_dirs: Sequence[Path],
     timeout: int,
     retries: int,
 ) -> dict[str, object]:
@@ -779,7 +863,12 @@ def run_one(
         if claude_prefix is None:
             raise ValueError("Claude command was not resolved")
         command = build_claude_command(
-            claude_prefix, model, read_tools, web_tools, claude_effort
+            claude_prefix,
+            model,
+            read_tools,
+            web_tools,
+            claude_effort,
+            claude_read_dirs,
         )
     output_path = reports_dir / safe_report_name(reviewer)
     errors: list[str] = []
@@ -1066,6 +1155,7 @@ def main() -> int:
         prompt_path = prepare_prompt_path(args.prompt_file, run_dir)
         prompt = read_utf8_exact(str(prompt_path), "prompt file")
         validate_task_prompt(prompt)
+        claude_read_dirs = resolve_prompt_skill_dirs(prompt)
         main_report_path = prepare_main_report_path(args.main_report_file, run_dir)
 
         requested_backends = {parse_reviewer(item)[0] for item in requested}
@@ -1143,6 +1233,7 @@ def main() -> int:
                     web_extension=web_extension,
                     thinking=args.thinking,
                     claude_effort=args.claude_effort,
+                    claude_read_dirs=claude_read_dirs,
                     timeout=args.timeout,
                     retries=args.retries,
                 )
