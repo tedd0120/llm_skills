@@ -5,7 +5,7 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 
 # LiteLLM 网关全量模型测速
 
-从网关的 `/v1/models` 拉取完整模型清单（而非本地配置的那几个），再对每个模型做流式对话测速，输出一份按首字延迟排序的报告。默认针对 360 LiteLLM Gateway（`litellm-dev.sandbox.deepbank.daikuan.qihoo.net`），可通过参数切换到任意网关。
+从网关的 `/v1/models` 拉取完整模型清单（而非本地配置的那几个），再对每个模型做流式对话测速，输出一份按 TPS/首字延迟等指标排序的报告。默认针对 360 LiteLLM Gateway（`litellm-dev.sandbox.deepbank.daikuan.qihoo.net`），可通过参数切换到任意网关。
 
 ## 何时使用
 
@@ -42,11 +42,12 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 
    测速默认在**仓库根目录** `data/litellm-model-speedtest/` 下生成日期命名的自包含 HTML 报告
    （`speedtest_YYYYMMDD.html`，同一天重跑会覆盖）与同名 JSON。`--report-dir` 改目录、
-   `--no-html` 关闭 HTML、`--models` 只测子集。
+   `--no-html` 关闭 HTML、`--models` 只测子集。测速结束后脚本会用**默认浏览器自动打开 HTML 报告**，
+   `--no-browser` 关闭自动打开。
 
-2. 读取脚本输出：
+2. 读取脚本输出（测速结束后默认浏览器会自动打开 HTML 报告）：
    - 终端进度行 `[n/总] ✅/❌ 模型 TTFT … E2E tok/s …` + 汇总表（可用模型按 TTFT 升序；不可用模型带失败归因）。
-   - 生成的 HTML 报告（浅色主题，自包含单文件）：KPI 卡片（总数/可用/不可用/最快首字/最高吞吐）+ 按供应商（GLM / Kimi / DeepSeek / Qwen / ChatGPT / Embedding / Image 等）分组的可用/不可用两张表，表头可点击排序，顶部有「🔍 搜索模型名」输入框 + 供应商筛选 chips；打开仓库根目录 `data/litellm-model-speedtest/*.html` 呈现给用户。
+   - 生成的 HTML 报告（浅色主题，自包含单文件）：自动读取本地 Pi（`~/.pi/agent/models.json`）中 360 provider 已配置的模型并在表格中高亮（`⚡ 已配置` 徽章 + 背景着色），按供应商（GLM / Kimi / DeepSeek / Qwen / Doubao / MiniMax / 360 / ChatGPT / Embedding / Image 等）分组且组内默认按端到端 TPS 降序排列，表头可点击按任意列重新排序，顶部有「🔍 搜索模型名」输入框 + 供应商筛选 chips（含一键筛选「⚡ 已配置」）；打开仓库根目录 `data/litellm-model-speedtest/*.html` 呈现给用户。
 
 3. 按以下口径解读，再回复用户（HTML 报告直接给文件路径，终端再贴一份精简结论）：
    - **首字延迟(TTFT)** = 首个可见文字 delta 时间。推理模型会先吐 `thinking_delta`，所以 TTFT 可能远大于"首个思考"时间——两个都报告。

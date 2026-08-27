@@ -31,6 +31,7 @@ import re
 import sys
 import threading
 import time
+import webbrowser
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -60,6 +61,30 @@ def load_env():
 
 
 load_env()
+
+def load_pi_configured_models(provider_name="360"):
+    """读取 ~/.pi/agent/models.json 中指定 provider 配置的模型 ID 集合。"""
+    config_dir = os.environ.get("PI_CONFIG_DIR")
+    if config_dir:
+        models_file = Path(config_dir) / "models.json"
+    else:
+        models_file = Path.home() / ".pi" / "agent" / "models.json"
+    if not models_file.is_file():
+        return set()
+    try:
+        data = json.loads(models_file.read_text(encoding="utf-8"))
+        providers = data.get("providers", {})
+        p = providers.get(provider_name)
+        if not p:
+            for k, v in providers.items():
+                if k.lower() == provider_name.lower():
+                    p = v
+                    break
+        if not p:
+            return set()
+        return {m["id"] for m in p.get("models", []) if isinstance(m, dict) and "id" in m}
+    except Exception:
+        return set()
 
 DEFAULT_BASE_URL = os.environ.get(
     "LLM_BASE_URL", "https://litellm-dev.sandbox.deepbank.daikuan.qihoo.net")
@@ -237,6 +262,7 @@ def classify_failure(r):
 
 VENDOR_ORDER = [
     "GLM / 智谱", "Kimi / 月之暗面", "DeepSeek", "Qwen / 阿里",
+    "Doubao / 字节", "MiniMax", "360 / 智脑",
     "ChatGPT / OpenAI", "Claude / Anthropic", "Gemini / Google",
     "Embedding / 向量", "Image / 图像", "其他",
 ]
@@ -254,7 +280,10 @@ def detect_vendor(model_id):
         ("GLM / 智谱", ["glm", "chatglm", "zhipu"]),
         ("Kimi / 月之暗面", ["kimi", "moonshot"]),
         ("DeepSeek", ["deepseek"]),
+        ("360 / 智脑", ["360", "zhinao", "qihoo"]),
         ("Qwen / 阿里", ["qwen"]),
+        ("Doubao / 字节", ["doubao", "skylark", "bytedance", "volcengine"]),
+        ("MiniMax", ["minimax", "abab"]),
         ("ChatGPT / OpenAI", ["gpt", "chatgpt", "openai", "o1", "o3", "o4"]),
         ("Claude / Anthropic", ["claude", "anthropic"]),
         ("Gemini / Google", ["gemini", "google"]),
@@ -282,15 +311,16 @@ def _badge(text, kind):
             f'font-weight:600;">{html.escape(text)}</span>')
 
 
-def render_html(results, meta, base_url, params, total_sec):
-    """生成自包含 HTML 报告（浅色主题，按供应商分组，带搜索/供应商筛选）。"""
+def render_html(results, meta, base_url, params, total_sec, configured_models=None):
+    """生成自包含 HTML 报告（浅色主题，按供应商分组，组内按 TPS 降序，带搜索/供应商筛选，Pi 已配模型高亮）。"""
+    if configured_models is None:
+        configured_models = load_pi_configured_models("360")
+    configured_models = set(configured_models or ())
+
     ok = [r for r in results if r.get("ok")]
     bad = [r for r in results if not r.get("ok")]
-    ok_sorted = sorted(ok, key=lambda x: x["ttft_s"] if x.get("ttft_s") is not None else 99999)
+    ok_sorted = sorted(ok, key=lambda x: x.get("e2e_tps", 0), reverse=True)
 
-    fastest = min((r for r in ok if r.get("ttft_s") is not None),
-                  key=lambda x: x["ttft_s"], default=None)
-    best_tps = max(ok, key=lambda x: x.get("e2e_tps", 0), default=None)
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
     def meta_cell(mid, key):
@@ -316,19 +346,24 @@ def render_html(results, meta, base_url, params, total_sec):
                 f'<span class="gname">{html.escape(vendor)}</span>'
                 f'<span class="gcount">{len(rs)} 个</span></td></tr>']
         for i, r in enumerate(rs):
+            mid = r["model"]
+            is_cfg = mid in configured_models
+            cfg_badge = ' <span class="tag-configured" title="已在 Pi 360 provider 中配置">⚡ 已配置</span>' if is_cfg else ""
+            tr_cls = ' class="configured"' if is_cfg else ""
+            cfg_attr = ' data-configured="1"' if is_cfg else ' data-configured="0"'
             ttft = r.get("ttft_s")
             ttft_cls = "dim" if ttft is None else ("fast" if ttft < 2 else ("mid" if ttft < 15 else "slow"))
             tps = r.get("e2e_tps", 0)
             tps_cls = "fast" if tps >= 60 else ("mid" if tps >= 25 else "slow")
-            vision = "👁" if meta_cell(r["model"], "vision") else ""
-            reason = "🧠" if meta_cell(r["model"], "reasoning") else ""
+            vision = "👁" if meta_cell(mid, "vision") else ""
+            reason = "🧠" if meta_cell(mid, "reasoning") else ""
             body.append(
-                f'<tr data-vendor="{html.escape(vendor)}">'
+                f'<tr{tr_cls} data-vendor="{html.escape(vendor)}"{cfg_attr}>'
                 f"<td class='num'>{i + 1}</td>"
-                f"<td class='mono'>{html.escape(r['model'])}</td>"
+                f"<td class='mono'>{html.escape(mid)}{cfg_badge}</td>"
                 f"<td class='dim'>{html.escape(vendor)}</td>"
-                f"<td class='dim'>{html.escape(str(meta_cell(r['model'], 'size')))}</td>"
-                f"<td class='dim'>{html.escape(str(meta_cell(r['model'], 'context')))}</td>"
+                f"<td class='dim'>{html.escape(str(meta_cell(mid, 'size')))}</td>"
+                f"<td class='dim'>{html.escape(str(meta_cell(mid, 'context')))}</td>"
                 f"<td class='dim'>{vision}{reason}</td>"
                 f"<td class='mono {ttft_cls}'>{_fmt(ttft, 's')}</td>"
                 f"<td class='mono dim'>{_fmt(r.get('first_think_s'), 's')}</td>"
@@ -347,9 +382,14 @@ def render_html(results, meta, base_url, params, total_sec):
                 f'<span class="gname">{html.escape(vendor)}</span>'
                 f'<span class="gcount">{len(rs)} 个</span></td></tr>']
         for r in rs:
+            mid = r["model"]
+            is_cfg = mid in configured_models
+            cfg_badge = ' <span class="tag-configured" title="已在 Pi 360 provider 中配置">⚡ 已配置</span>' if is_cfg else ""
+            tr_cls = ' class="configured"' if is_cfg else ""
+            cfg_attr = ' data-configured="1"' if is_cfg else ' data-configured="0"'
             body.append(
-                f'<tr data-vendor="{html.escape(vendor)}">'
-                f"<td class='mono'>{html.escape(r['model'])}</td>"
+                f'<tr{tr_cls} data-vendor="{html.escape(vendor)}"{cfg_attr}>'
+                f"<td class='mono'>{html.escape(mid)}{cfg_badge}</td>"
                 f"<td class='dim'>{html.escape(vendor)}</td>"
                 f"<td>{_badge(classify_failure(r), 'bad')}</td>"
                 f"<td class='mono dim'>{html.escape(str(r.get('status') or ''))}</td>"
@@ -358,25 +398,13 @@ def render_html(results, meta, base_url, params, total_sec):
         body.append("</tbody>")
         rows_bad_tbodies.append("".join(body))
 
-    kpi = [
-        ("总模型", len(results), "dim"),
-        ("可用", len(ok), "ok"),
-        ("不可用", len(bad), "bad" if bad else "dim"),
-        ("最快首字", f"{fastest['model'].split('/')[-1]} · {_fmt(fastest['ttft_s'], 's')}" if fastest else "-", "ok"),
-        ("最高吞吐", f"{best_tps['model'].split('/')[-1]} · {_fmt(best_tps.get('e2e_tps'), ' tok/s')}" if best_tps else "-", "ok"),
-    ]
-    kpi_cards = "".join(
-        f"<div class='kpi {k}'>"
-        f"<div class='kpi-label'>{html.escape(label)}</div>"
-        f"<div class='kpi-value'>{html.escape(str(val))}</div>"
-        f"</div>" for label, val, k in kpi
-    )
-
     vendors = []
     for v in list(ok_groups) + list(bad_groups):
         if v not in vendors:
             vendors.append(v)
-    chips = '<button class="chip active" data-v="">全部</button>' + "".join(
+    cfg_count = sum(1 for r in results if r["model"] in configured_models)
+    cfg_chip = f'<button class="chip chip-cfg" data-v="__cfg__">⚡ 已配置 ({cfg_count})</button>' if cfg_count else ""
+    chips = '<button class="chip active" data-v="">全部</button>' + cfg_chip + "".join(
         f'<button class="chip" data-v="{html.escape(v)}">{html.escape(v)}</button>' for v in vendors)
 
     return rf"""<!DOCTYPE html>
@@ -404,13 +432,14 @@ def render_html(results, meta, base_url, params, total_sec):
            color:var(--dim); font-size:13px; cursor:pointer; transition:.15s; }}
   .chip:hover {{ color:var(--accent); border-color:var(--accent); }}
   .chip.active {{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }}
-  .kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:28px; }}
-  .kpi {{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
-          box-shadow:0 1px 2px rgba(0,0,0,.04); }}
-  .kpi-label {{ color:var(--dim); font-size:12px; }}
-  .kpi-value {{ font-size:20px; font-weight:700; margin-top:4px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }}
-  .kpi.ok .kpi-value {{ color:var(--green); }}
-  .kpi.bad .kpi-value {{ color:var(--red); }}
+  .chip-cfg {{ border-color:#54aeff; color:var(--accent); font-weight:600; }}
+  .chip-cfg.active {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
+  tr.configured td {{ background:#edf5ff; font-weight:500; }}
+  tr.configured td:first-child {{ border-left:3px solid var(--accent); }}
+  tr.configured:hover td {{ background:#dfedff; }}
+  .tag-configured {{ display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px;
+                    background:#ddf4ff; color:#0969da; border:1px solid #54aeff;
+                    font-size:11px; font-weight:600; vertical-align:middle; }}
   h2 {{ font-size:16px; margin:32px 0 12px; padding-left:10px; border-left:3px solid var(--accent); }}
   .table-wrap {{ background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:auto;
                  max-height:70vh; box-shadow:0 1px 2px rgba(0,0,0,.04); }}
@@ -442,9 +471,7 @@ def render_html(results, meta, base_url, params, total_sec):
     <div id="vendorChips" class="chips">{chips}</div>
   </div>
 
-  <div class="kpis">{kpi_cards}</div>
-
-  <h2>✅ 可用模型（按供应商分组，组内按首字延迟排序）</h2>
+  <h2>✅ 可用模型（按供应商分组，组内按端到端 TPS 降序）</h2>
   <div class="table-wrap"><table id="okTable">
     <thead><tr>
       <th data-n="num">#</th><th>模型</th><th>供应商</th><th>规模</th><th>上下文</th><th>能力</th>
@@ -467,16 +494,20 @@ let activeVendor = '';
 const search = document.getElementById('search');
 function applyFilters() {{
   const q = search.value.trim().toLowerCase();
+  const showCfgOnly = activeVendor === '__cfg__';
   document.querySelectorAll('table tbody.group').forEach(tb => {{
     const vendor = tb.dataset.vendor;
-    const vendorOk = activeVendor === '' || vendor === activeVendor;
     let visible = 0;
     tb.querySelectorAll('tr[data-vendor]').forEach(row => {{
-      const ok = vendorOk && (q === '' || row.innerText.toLowerCase().includes(q));
+      const matchVendor = showCfgOnly
+        ? row.dataset.configured === '1'
+        : (activeVendor === '' || vendor === activeVendor);
+      const matchSearch = q === '' || row.innerText.toLowerCase().includes(q);
+      const ok = matchVendor && matchSearch;
       row.style.display = ok ? '' : 'none';
       if (ok) visible++;
     }});
-    tb.style.display = (vendorOk && visible > 0) ? '' : 'none';
+    tb.style.display = visible > 0 ? '' : 'none';
   }});
 }}
 search.addEventListener('input', applyFilters);
@@ -562,6 +593,7 @@ def main(argv=None):
     ap.add_argument("--report-dir", default=DEFAULT_REPORT_DIR,
                     help="HTML/JSON 报告输出目录（默认仓库根目录 data/litellm-model-speedtest）")
     ap.add_argument("--no-html", action="store_true", help="不生成 HTML 报告")
+    ap.add_argument("--no-browser", action="store_true", help="不自动用默认浏览器打开 HTML 报告")
     ap.add_argument("--out", default=None, help="结果 JSON 输出路径（覆盖默认）")
     args = ap.parse_args(argv)
 
@@ -635,6 +667,9 @@ def main(argv=None):
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(render_html(results, meta, args.base_url, params, total_sec))
         log(f"HTML 报告: {html_path}")
+        if not args.no_browser:
+            webbrowser.open(Path(html_path).as_uri())
+            log("已在默认浏览器打开 HTML 报告")
     return 0
 
 

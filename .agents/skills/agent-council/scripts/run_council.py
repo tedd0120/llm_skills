@@ -46,6 +46,14 @@ PROVIDER_PREFERENCES = {
 
 DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 60 * 60
 
+CLAUDE_REVIEWER_SYSTEM_PROMPT = (
+    "You are an independent reviewer. Complete the user task and return only the "
+    "substantive final answer. Use only tools actually provided by the runtime. "
+    "Never simulate, narrate, or print tool calls or tool outputs. If no tools are "
+    "available, answer from the prompt alone. A preamble, plan, or tool transcript "
+    "is not a final answer."
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -86,9 +94,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--read-tools",
         action="store_true",
+        default=True,
         help=(
-            "Allow Pi read,grep,find,ls and Claude Read,Grep,Glob tools. "
-            "This is not a path sandbox."
+            "Allow Pi read,grep,find,ls and Claude Read,Grep,Glob tools "
+            "(enabled by default). This is not a path sandbox."
         ),
     )
     parser.add_argument(
@@ -599,6 +608,8 @@ def build_claude_command(
         "auto" if web_tools else "dontAsk",
         "--tools",
         ",".join(tools),
+        "--system-prompt",
+        CLAUDE_REVIEWER_SYSTEM_PROMPT,
     ]
 
 

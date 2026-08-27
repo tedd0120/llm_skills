@@ -174,13 +174,22 @@ class AgentCouncilRunnerTests(unittest.TestCase):
             self.assertIn("--no-session-persistence", command)
             self.assertIn("--disable-slash-commands", command)
             self.assertIn("--strict-mcp-config", command)
+            self.assertEqual(
+                command[command.index("--system-prompt") + 1],
+                RUNNER.CLAUDE_REVIEWER_SYSTEM_PROMPT,
+            )
             # The CLI rejects a bare "{}" — the object must carry mcpServers.
             mcp_config = command[command.index("--mcp-config") + 1]
             self.assertEqual(json.loads(mcp_config), {"mcpServers": {}})
-        self.assertEqual(disabled[-1], "")
-        self.assertEqual(read_enabled[-1], "Read,Grep,Glob")
-        self.assertEqual(web_enabled[-1], "WebFetch")
-        self.assertEqual(both_enabled[-1], "Read,Grep,Glob,WebFetch")
+        self.assertEqual(disabled[disabled.index("--tools") + 1], "")
+        self.assertEqual(
+            read_enabled[read_enabled.index("--tools") + 1], "Read,Grep,Glob"
+        )
+        self.assertEqual(web_enabled[web_enabled.index("--tools") + 1], "WebFetch")
+        self.assertEqual(
+            both_enabled[both_enabled.index("--tools") + 1],
+            "Read,Grep,Glob,WebFetch",
+        )
         self.assertIn("dontAsk", disabled)
         self.assertIn("dontAsk", read_enabled)
         self.assertIn("auto", web_enabled)
@@ -387,6 +396,7 @@ class AgentCouncilRunnerTests(unittest.TestCase):
             self.assertEqual(len(dispatched), 2)
             for call in dispatched:
                 self.assertEqual(call["prompt"], exact_prompt)
+                self.assertTrue(call["read_tools"])
                 self.assertNotIn(secret, call["prompt"])
                 self.assertNotIn("main_report", call)
                 self.assertIsNone(call["web_extension"])
