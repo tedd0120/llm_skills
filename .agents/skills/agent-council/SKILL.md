@@ -15,23 +15,28 @@ description: 通过 Pi CLI 与 Claude CLI 将用户任务 prompt 原样交给多
 
 若用户原文依赖当前 prompt 之外的早先上下文，说明缺失内容并请用户给出一条自包含 prompt，收到后再调用模型。
 
-## 每次调用的启动检查
+## 每次调用的阻塞式 reviewer 选择
 
-按顺序完成以下步骤，全部完成后才调用 reviewer：
+按顺序完成以下步骤。每次启动都停在第 7 步等待用户明确选择，收到答复后才调用 reviewer：
 
 1. 用 `git rev-parse --show-toplevel` 解析工作区根；不在 Git 工作树中则使用当前目录。
 2. 检查根目录下的 `.agent-council/`；不存在则创建。
 3. 检查 `.agent-council/default-models.txt`；不存在则创建为 0 字节空文件。
 4. 读取默认模型配置。格式为每个非空行一个 reviewer ID：`pi:provider/model` 或 `claude:model`。保留文件中的顺序。
 5. 实际执行 `pi --list-models`，将本次输出作为当前 Pi 可用模型清单。
-6. 在调用 reviewer 前向用户逐项列出：
-   - 默认使用模型；配置为空时明确写“未配置”。
-   - 本次 `pi --list-models` 返回的全部可用模型。
-   - 本次实际请求的 reviewer 名单。
+6. 在交互式终端启动当前 `claude` CLI，输入 `/model` 打开模型选择器，记录选择器此刻展示的全部模型 ID 或别名，然后退出该会话。此列表包含当前账号、provider、策略和环境实际提供的选项。
+7. 在同一条消息中完整展示以下内容，然后结束当前回合：
+   - `默认 reviewer`：逐行列出配置内容；配置为空时写“未配置”。
+   - `Pi model list`：逐行列出本次 `pi --list-models` 的完整结果。
+   - `Claude model list`：逐行列出本次 `/model` 选择器的完整结果。
+   - 配置非空时询问：“是否直接使用默认reviewer？”
+   - 配置为空时请用户手动填写至少两个 reviewer ID。
 
-runner 会再次执行同样的目录、配置和 Pi CLI 检查，并在 stderr 与最终 JSON 摘要中返回 `default_models`、`available_pi_models` 和 `default_models_config`。以本次 CLI 输出为准。
+即使当前 user prompt 已写 reviewer，也先展示三组信息并阻塞，把这些 ID 作为待确认的手动选择。用户明确确认后再继续；用户选择默认名单时不添加 `--reviewer`，用户手动填写或覆盖名单时重复传入 `--reviewer`。
 
-默认使用 `.agent-council/default-models.txt` 中的名单。用户在当前 prompt 明确指定 reviewer 时，以用户指定名单覆盖配置，同时仍列出配置默认值与全部 Pi 可用模型。配置为空且用户未指定 reviewer 时，保持文件为空并请用户选择至少两个 reviewer，收到选择后再调用。
+任一模型清单获取失败时，在对应清单下展示原始失败原因并继续等待用户处理。以本轮实时输出为准。
+
+runner 会再次执行目录、配置和 Pi CLI 检查，并在 stderr 与最终 JSON 摘要中返回 `default_models`、`available_pi_models`、`available_claude_models`、`persisted_default_models` 和 `default_models_config`。
 
 ## 调用 runner
 
@@ -59,6 +64,13 @@ python <skill-dir>/scripts/run_council.py \
 --reviewer "claude:model"
 ```
 
+把第 6 步实时看到的每个 Claude 模型按原顺序重复传入：
+
+```text
+--available-claude-model "opus"
+--available-claude-model "sonnet"
+```
+
 可用参数：
 
 - `--thinking <level>`：Pi thinking，默认 `high`。
@@ -69,6 +81,8 @@ python <skill-dir>/scripts/run_council.py \
 至少请求两个 reviewer。Pi 模型必须出现在本次 `pi --list-models` 输出中；runner 可在同一 provider 内按既定优先级替换不可用模型，并如实披露替换。Claude 模型由 Claude CLI 调用时校验。每次尝试默认超时 3600 秒，失败重试一次。
 
 runner 使用 Pi JSONL 与 Claude JSON 读取终止状态。只有正常结束且包含最终回答的调用记为成功；长度上限、未完成工具调用、空回答和结构化输出错误进入重试。重试仍失败时，报告保留完整原始 stdout 与 stderr。
+
+手动名单完成调用后，runner 立即把其中已成功的实际 reviewer 按调用顺序原子写入 `.agent-council/default-models.txt`。至少两个 reviewer 成功时才写入；Pi 发生替换时写入实际跑通的 ID。该回填发生在等待主 Agent 报告之前。直接使用默认名单时保留配置文件内容。
 
 后台启动 runner。确认 reviewer 调用开始后，主 Agent 立即独立完成用户原始任务，并将完整结果暂时保留在自身上下文中。runner 提示全部 reviewer 调用完成后，主 Agent 在读取 reviewer 输出前把结果一次性写入 `--main-report-file`，视为冻结。
 

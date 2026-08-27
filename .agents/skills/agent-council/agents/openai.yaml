@@ -1,7 +1,7 @@
 interface:
   display_name: "Agent 会审"
   short_description: "并行完成 prompt、保存报告，等待下一步指令"
-  default_prompt: "使用 $agent-council 让主 Agent 和所选 Pi、Claude 模型独立完成我的 prompt，只保存各自报告并通知我完成；等我的下一条 prompt 再处理这些报告。"
+  default_prompt: "使用 $agent-council 先展示默认 reviewer 与实时 Pi、Claude 模型清单并等待我选择，再让主 Agent 和所选模型独立完成我的 prompt；保存各自报告，等我的下一条 prompt 再处理。"
 
 policy:
   allow_implicit_invocation: false

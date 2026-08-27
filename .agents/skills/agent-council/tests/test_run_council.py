@@ -73,6 +73,49 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                 ["pi:openai-codex/gpt-5.6-sol", "claude:opus"],
             )
 
+    def test_verified_reviewers_replace_default_config_atomically(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "default-models.txt"
+            config.write_text("claude:old\n", encoding="utf-8")
+
+            RUNNER.write_default_reviewers(
+                config,
+                ["pi:provider/model", "claude:opus"],
+            )
+
+            self.assertEqual(
+                config.read_text(encoding="utf-8"),
+                "pi:provider/model\nclaude:opus\n",
+            )
+            self.assertFalse(config.with_name("default-models.txt.tmp").exists())
+
+    def test_only_successful_manual_roster_with_two_reviewers_is_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "default-models.txt"
+            config.write_text("claude:old\n", encoding="utf-8")
+            results = [
+                {"reviewer": "pi:provider/model", "ok": True},
+                {"reviewer": "claude:opus", "ok": True},
+                {"reviewer": "claude:broken", "ok": False},
+            ]
+
+            persisted = RUNNER.persist_verified_manual_roster(config, True, results)
+
+            self.assertEqual(persisted, ["pi:provider/model", "claude:opus"])
+            self.assertEqual(
+                config.read_text(encoding="utf-8"),
+                "pi:provider/model\nclaude:opus\n",
+            )
+
+            config.write_text("claude:old\n", encoding="utf-8")
+            self.assertIsNone(
+                RUNNER.persist_verified_manual_roster(config, False, results)
+            )
+            self.assertIsNone(
+                RUNNER.persist_verified_manual_roster(config, True, results[:1])
+            )
+            self.assertEqual(config.read_text(encoding="utf-8"), "claude:old\n")
+
     def test_run_inputs_and_main_report_must_stay_inside_run_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "workspace"
@@ -368,6 +411,10 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                 "pi:provider-a/model-a",
                 "--reviewer",
                 "claude:opus",
+                "--available-claude-model",
+                "opus",
+                "--available-claude-model",
+                "sonnet",
             ]
             stdout = io.StringIO()
             with (
@@ -413,7 +460,16 @@ class AgentCouncilRunnerTests(unittest.TestCase):
                 ["pi:provider-a/model-a", "claude:opus"],
             )
             self.assertEqual(summary["available_pi_models"], ["provider-a/model-a"])
+            self.assertEqual(summary["available_claude_models"], ["opus", "sonnet"])
             self.assertEqual(summary["default_models"], [])
+            self.assertEqual(
+                summary["persisted_default_models"],
+                ["pi:provider-a/model-a", "claude:opus"],
+            )
+            self.assertEqual(
+                (state / "default-models.txt").read_text(encoding="utf-8"),
+                "pi:provider-a/model-a\nclaude:opus\n",
+            )
             self.assertFalse((run_dir / "report.md").exists())
             self.assertEqual(
                 {path.name for path in (run_dir / "reports").iterdir()},

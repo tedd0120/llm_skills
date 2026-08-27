@@ -155,6 +155,16 @@ def parse_args() -> argparse.Namespace:
         default="claude",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--available-claude-model",
+        action="append",
+        dest="available_claude_models",
+        default=[],
+        help=(
+            "Claude model ID captured from the live `/model` picker before user "
+            "confirmation. Repeat for every displayed option."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -355,6 +365,36 @@ def read_default_reviewers(config: Path) -> list[str]:
             return [line.strip() for line in handle if line.strip()]
     except (OSError, UnicodeError) as exc:
         raise ValueError(f"cannot read default model config as UTF-8: {config}: {exc}") from exc
+
+
+def write_default_reviewers(config: Path, reviewers: Sequence[str]) -> None:
+    """Atomically replace the default roster with verified reviewer IDs."""
+    content = "".join(f"{reviewer}\n" for reviewer in reviewers)
+    temporary = config.with_name(config.name + ".tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+        os.replace(temporary, config)
+    except OSError as exc:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ValueError(f"cannot update default model config: {config}: {exc}") from exc
+
+
+def persist_verified_manual_roster(
+    config: Path,
+    manual_override: bool,
+    results: Sequence[dict[str, object]],
+) -> list[str] | None:
+    if not manual_override:
+        return None
+    verified = [str(item["reviewer"]) for item in results if item["ok"]]
+    if len(verified) < 2:
+        return None
+    write_default_reviewers(config, verified)
+    return verified
 
 
 def resolve_command(command_text: str, label: str) -> list[str]:
@@ -848,6 +888,8 @@ def write_input(
     config: Path,
     default_reviewers: Sequence[str],
     available_pi_models: Sequence[str],
+    available_claude_models: Sequence[str],
+    persisted_default_reviewers: Sequence[str] | None,
     requested: Sequence[str],
     roster: Sequence[tuple[str, str]],
     selection_failures: Sequence[str],
@@ -877,7 +919,15 @@ def write_input(
         "\n".join(f"- {item}" for item in selection_failures) if selection_failures else "- None"
     )
     default_text = "\n".join(f"- `{item}`" for item in default_reviewers) or "- _none_"
-    available_text = "\n".join(f"- `{item}`" for item in available_pi_models) or "- _none_"
+    available_pi_text = "\n".join(f"- `{item}`" for item in available_pi_models) or "- _none_"
+    available_claude_text = (
+        "\n".join(f"- `{item}`" for item in available_claude_models) or "- _none recorded_"
+    )
+    persisted_text = (
+        "\n".join(f"- `{item}`" for item in persisted_default_reviewers)
+        if persisted_default_reviewers is not None
+        else "- _unchanged_"
+    )
     content = f"""\
 # Agent Council Input
 
@@ -904,7 +954,15 @@ def write_input(
 
 ## Pi models reported by `pi --list-models`
 
-{available_text}
+{available_pi_text}
+
+## Claude models captured from the live `/model` picker
+
+{available_claude_text}
+
+## Verified models persisted as defaults
+
+{persisted_text}
 
 ## Selection failures
 
@@ -954,6 +1012,8 @@ def main() -> int:
     config_path: Path | None = None
     default_reviewers: list[str] = []
     available_pi_models: list[str] = []
+    available_claude_models: list[str] = list(args.available_claude_models)
+    persisted_default_reviewers: list[str] | None = None
     web_extension: Path | None = None
 
     try:
@@ -986,6 +1046,12 @@ def main() -> int:
         print(
             "[agent-council] Pi models from `pi --list-models`: "
             + (", ".join(available_pi_models) if available_pi_models else "<unavailable>"),
+            file=sys.stderr,
+            flush=True,
+        )
+        print(
+            "[agent-council] Claude models from the live `/model` picker: "
+            + (", ".join(available_claude_models) if available_claude_models else "<none recorded>"),
             file=sys.stderr,
             flush=True,
         )
@@ -1025,6 +1091,8 @@ def main() -> int:
                 config=config_path,
                 default_reviewers=default_reviewers,
                 available_pi_models=available_pi_models,
+                available_claude_models=available_claude_models,
+                persisted_default_reviewers=persisted_default_reviewers,
                 requested=requested,
                 roster=roster,
                 selection_failures=selection_failures,
@@ -1045,6 +1113,7 @@ def main() -> int:
                 selection_failures=selection_failures,
                 default_models=default_reviewers,
                 available_pi_models=available_pi_models,
+                available_claude_models=available_claude_models,
                 default_models_config=str(config_path),
             )
             return 3
@@ -1094,6 +1163,24 @@ def main() -> int:
                 str(result.pop("_content")), encoding="utf-8"
             )
 
+        order = {actual: index for index, (_, actual) in enumerate(roster)}
+        results.sort(key=lambda item: order.get(str(item["reviewer"]), len(order)))
+        succeeded = [item for item in results if item["ok"]]
+        failed = [item for item in results if not item["ok"]]
+        status = "ready" if len(succeeded) >= 2 else "aborted"
+        persisted_default_reviewers = persist_verified_manual_roster(
+            config_path,
+            args.reviewers is not None,
+            results,
+        )
+        if persisted_default_reviewers is not None:
+            print(
+                "[agent-council] verified manual reviewer roster saved to "
+                f"{config_path}: {', '.join(persisted_default_reviewers)}",
+                file=sys.stderr,
+                flush=True,
+            )
+
         print(
             "[agent-council] reviewer calls complete; collecting the frozen independent "
             "main-agent report",
@@ -1103,14 +1190,14 @@ def main() -> int:
         main_report = wait_for_main_report(main_report_path, args.timeout)
         main_report_target = main_report_path
 
-        order = {actual: index for index, (_, actual) in enumerate(roster)}
-        results.sort(key=lambda item: order.get(str(item["reviewer"]), len(order)))
         write_input(
             path=run_dir / "input.md",
             root=root,
             config=config_path,
             default_reviewers=default_reviewers,
             available_pi_models=available_pi_models,
+            available_claude_models=available_claude_models,
+            persisted_default_reviewers=persisted_default_reviewers,
             requested=requested,
             roster=roster,
             selection_failures=selection_failures,
@@ -1124,9 +1211,6 @@ def main() -> int:
             main_report_recorded=True,
         )
 
-        succeeded = [item for item in results if item["ok"]]
-        failed = [item for item in results if not item["ok"]]
-        status = "ready" if len(succeeded) >= 2 else "aborted"
         emit_summary(
             run_dir,
             status,
@@ -1142,6 +1226,8 @@ def main() -> int:
             reports=results,
             default_models=default_reviewers,
             available_pi_models=available_pi_models,
+            available_claude_models=available_claude_models,
+            persisted_default_models=persisted_default_reviewers,
             default_models_config=str(config_path),
         )
         return 0 if status == "ready" else 3
@@ -1163,6 +1249,8 @@ def main() -> int:
             error=str(exc),
             default_models=default_reviewers,
             available_pi_models=available_pi_models,
+            available_claude_models=available_claude_models,
+            persisted_default_models=persisted_default_reviewers,
             default_models_config=str(config_path) if config_path else None,
         )
         return 2
