@@ -9,7 +9,7 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 
 ## 何时使用
 
-- 用户说"列出某个网关/360 provider 的**所有**模型"，而本地 `~/.pi/agent/models.json` 只配了子集时。
+- 用户说"列出某个网关/360 provider 的**所有**模型"，而本地 `~/.pi/agent/models.json` 只配了子集时（调用本 skill 自动执行全量测速）。
 - 用户要求"测速"，指标包含：连通性、首字延迟(TTFT)、token/秒(TPS)。
 - 需要在同模型多个后端前缀（`m1/`、`m2/`、`360/`、`-openai` 后缀）之间选最快的部署。
 
@@ -40,19 +40,29 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
      --concurrency 6 --max-tokens 1024 --timeout 120
    ```
 
-   测速默认在**仓库根目录** `data/litellm-model-speedtest/` 下生成日期命名的自包含 HTML 报告
-   （`speedtest_YYYYMMDD.html`，同一天重跑会覆盖）与同名 JSON。`--report-dir` 改目录、
+   测速默认在**仓库根目录** `data/litellm-model-speedtest/` 下生成固定命名的自包含 HTML 报告
+   （`speedtest.html`，每次运行直接覆盖）与同名 JSON（`speedtest.json`）。`--report-dir` 改目录、
    `--no-html` 关闭 HTML、`--models` 只测子集。测速结束后脚本会用**默认浏览器自动打开 HTML 报告**，
    `--no-browser` 关闭自动打开。
 
 2. 读取脚本输出（测速结束后默认浏览器会自动打开 HTML 报告）：
    - 终端进度行 `[n/总] ✅/❌ 模型 TTFT … E2E tok/s …` + 汇总表（可用模型按 TTFT 升序；不可用模型带失败归因）。
-   - 生成的 HTML 报告（浅色主题，自包含单文件）：自动读取本地 Pi（`~/.pi/agent/models.json`）中 360 provider 已配置的模型并在表格中高亮（`⚡ 已配置` 徽章 + 背景着色），按供应商（GLM / Kimi / DeepSeek / Qwen / Doubao / MiniMax / 360 / ChatGPT / Embedding / Image 等）分组且组内默认按端到端 TPS 降序排列，表头可点击按任意列重新排序，顶部有「🔍 搜索模型名」输入框 + 供应商筛选 chips（含一键筛选「⚡ 已配置」）；打开仓库根目录 `data/litellm-model-speedtest/*.html` 呈现给用户。
+   - 生成的 HTML 报告（浅色主题，自包含单文件）：
+     - 自动同步 GitHub `anomalyco/models.dev` 开源数据库中的模型元信息（发布日期、上下文限制、最大输出 Tokens、思考推理、视觉等多模态能力，无价格）；
+     - 自动识别并归一化模型版本（如 `360/glm-5.3`、`m3/glm-5.3`、`m3/glm-5.3-openai` 归为 `GLM-5.3` 版本，`m1/deepseek-v4-flash`、`360/deepseek-v4-flash-openai` 归为 `DeepSeek V4 Flash` 版本）；
+     - 按供应商（GLM / Kimi / DeepSeek / Qwen / Doubao / MiniMax 等）分类；每个供应商下将同一模型版本合并为专属卡片，**优先展示最新发布的版本（release_date 降序）**；
+     - **每个模型版本卡片内各部署节点按实测端到端 TPS 降序排列**，高亮对比不同后端速度；
+     - 自动读取本地 Pi（`~/.pi/agent/models.json`）中 360 provider 已配置的模型并在表格中高亮（`⚡ 已配置` 徽章 + 背景着色），点击模型名自动复制到剪贴板，顶部有「🔍 搜索模型名 / 版本名」输入框 + 供应商筛选 chips（含一键筛选「⚡ 已配置」）；打开仓库根目录 `data/litellm-model-speedtest/speedtest.html` 呈现给用户。
 
-3. 按以下口径解读，再回复用户（HTML 报告直接给文件路径，终端再贴一份精简结论）：
+3. 按以下口径解读，再回复用户（HTML 报告直接给文件路径，终端贴一份精简结论，并**主动询问用户是否需要为本地 Pi（360 provider）增删模型**）：
    - **首字延迟(TTFT)** = 首个可见文字 delta 时间。推理模型会先吐 `thinking_delta`，所以 TTFT 可能远大于"首个思考"时间——两个都报告。
    - **端到端 TPS** = usage 上报的输出 token 数 ÷ 总耗时；usage 缺失时按 CJK=1 token、其余 4 字符=1 token 估算。
    - TTFT 为 `(无正文)` 表示在 max_tokens 预算内只输出了思考、没有正文（纯推理模型），或模型非对话（embedding 返回 0 token）。
+   - 每次测速完成回复的最后，提示用户："如需为本地 Pi（360 provider）新增或删除模型，可直接告诉我模型名。"
+
+4. **增/删模型后续处理**：
+   - 测速完成后用户若要求"帮我增/删模型"或"加到配置里"，默认修改本机 Pi 的全局配置 `~/.pi/agent/models.json` 中 `providers["360"].models` 列表。
+   - 新增模型时参考元信息（`/model/info`）补全 `id`、`name`、`reasoning`、`input`（是否含 `image` 视觉能力）、`contextWindow` 与 `maxTokens`。
 
 ## 陷阱
 

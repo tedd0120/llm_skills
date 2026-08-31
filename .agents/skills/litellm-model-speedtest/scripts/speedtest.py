@@ -17,8 +17,8 @@
   python speedtest.py --base-url https://gateway.example.com --api-key sk-xxx \
       --proxy http://127.0.0.1:7897 --concurrency 6 --max-tokens 1024
 
-输出：终端汇总 + 默认生成仓库根目录 data/litellm-model-speedtest/speedtest_YYYYMMDD.json
-与同目录同名 .html 自包含报告（--no-html 关闭）。
+输出：终端汇总 + 默认生成仓库根目录 data/litellm-model-speedtest/speedtest.json
+与同目录同名 speedtest.html 自包含报告（每次运行直接覆盖，--no-html 关闭）。
 
 配置优先级：命令行参数 > 环境变量 > 内置默认值。
 环境变量：LLM_BASE_URL / LLM_API_KEY / LLM_PROXY / LLM_HTTP_PROXY
@@ -121,6 +121,25 @@ def build_headers(api_key):
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     }
+
+
+def fetch_models_dev(proxies=None):
+    """从 models.dev 抓取全球模型元数据（上下文、输出上限、发布时间、推理、模态等）。
+    优先请求 models.dev API，失败降级到 raw GitHub，均失败返回空 dict（不影响主流程）。"""
+    urls = [
+        "https://models.dev/models.json",
+        "https://raw.githubusercontent.com/anomalyco/models.dev/main/models.json",
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, proxies=proxies, timeout=12)
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data, dict) and data:
+                    return data
+        except Exception:
+            continue
+    return {}
 
 
 def estimate_tokens(text: str) -> int:
@@ -311,205 +330,407 @@ def _badge(text, kind):
             f'font-weight:600;">{html.escape(text)}</span>')
 
 
-def render_html(results, meta, base_url, params, total_sec, configured_models=None):
-    """生成自包含 HTML 报告（浅色主题，按供应商分组，组内按 TPS 降序，带搜索/供应商筛选，Pi 已配模型高亮）。"""
+def normalize_model_version(mid):
+    """从网关模型 ID 提取归一化的版本 key 与基础展示名。
+    例如：
+      m3/glm-5.3-flash-openai -> glm-5.3-flash
+      360/deepseek-v4-pro-openai -> deepseek-v4-pro
+      m1/deepseek-v4-flash -> deepseek-v4-flash
+      360/deepseek-r1-0528 -> deepseek-r1
+      360/360-qwen3-coder-480b-a35b -> qwen3-coder-480b-a35b
+    """
+    raw = (mid or "").split("/")[-1]
+    # 去除 -openai / _openai
+    v = re.sub(r"[-_]openai$", "", raw, flags=re.IGNORECASE)
+    # 去除 360- 前缀
+    if v.lower().startswith("360-"):
+        v = v[4:]
+    v_clean = v
+    # deepseek-r1-0528 / deepseek-v3-250324 -> deepseek-r1 / deepseek-v3
+    if re.match(r"^(deepseek-[rv]\d+(\.\d+)?)-(\d{4,6})$", v_clean, re.I):
+        v_clean = re.sub(r"-(\d{4,6})$", "", v_clean, flags=re.I)
+    # kimi-k2-instruct-0905 -> kimi-k2
+    elif re.match(r"^(kimi-k\d+(\.\d+)?)-instruct-\d+$", v_clean, re.I):
+        v_clean = re.sub(r"-instruct-\d+$", "", v_clean, flags=re.I)
+    # glm-5.2-codex -> glm-5.2
+    elif v_clean.lower() == "glm-5.2-codex":
+        v_clean = "glm-5.2"
+    # 去除 -instruct 后缀
+    elif v_clean.lower().endswith("-instruct"):
+        v_clean = v_clean[:-9]
+    return v_clean.lower(), v
+
+
+def match_models_dev(canon_key, models_dev):
+    """在 models.dev 中检索对应的官方规格数据。"""
+    if not models_dev:
+        return None
+    # 1. 直接 slug 匹配
+    norm_k = canon_key.replace(".", "-").replace("_", "-")
+    for k, info in models_dev.items():
+        slug = k.split("/")[-1].lower().replace(".", "-").replace("_", "-")
+        if slug == norm_k:
+            return info
+    # 2. 纯字母数字匹配
+    clean_k = re.sub(r"[^a-z0-9]", "", canon_key)
+    for k, info in models_dev.items():
+        slug_clean = re.sub(r"[^a-z0-9]", "", k.split("/")[-1].lower())
+        if clean_k == slug_clean:
+            return info
+    # 3. 边界前缀匹配
+    for k, info in models_dev.items():
+        slug = k.split("/")[-1].lower()
+        if slug.startswith(canon_key + "-") or canon_key.startswith(slug + "-"):
+            return info
+    return None
+
+
+def format_token_count(n):
+    """格式化 token 数量：1000000 -> 1M (1,000,000), 131072 -> 131K (131,072)"""
+    if not n or not isinstance(n, (int, float)):
+        return "-"
+    n = int(n)
+    if n >= 1_000_000:
+        val = f"{n/1_000_000:.1f}M".replace(".0M", "M")
+    elif n >= 1_000:
+        val = f"{n/1_000:.0f}K"
+    else:
+        val = str(n)
+    return f"{val} ({n:,})"
+
+
+def render_html(results, meta, base_url, params, total_sec, configured_models=None, models_dev=None):
+    """生成自包含 HTML 报告：
+    - 按供应商分组
+    - 每个供应商下按模型版本合并（Version Block）
+    - 优先展示最新发布的版本（release_date 降序）
+    - 每个版本内各部署节点按 TPS 降序排序
+    - 显示上下文窗口、最大输出 token 等元信息（无价格）
+    """
     if configured_models is None:
         configured_models = load_pi_configured_models("360")
     configured_models = set(configured_models or ())
-
-    ok = [r for r in results if r.get("ok")]
-    bad = [r for r in results if not r.get("ok")]
-    ok_sorted = sorted(ok, key=lambda x: x.get("e2e_tps", 0), reverse=True)
+    models_dev = models_dev or {}
 
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    def meta_cell(mid, key):
-        m = meta.get(mid) or {}
-        return m.get(key) or ""
+    # 1. 结构化归类：Vendor -> Canonical Version -> List of models
+    vendor_dict = {}
+    for r in results:
+        mid = r["model"]
+        vendor = detect_vendor(mid)
+        cv_key, cv_raw = normalize_model_version(mid)
+        dev_meta = match_models_dev(cv_key, models_dev) or {}
+        local_m = meta.get(mid) or {}
 
-    def group_by(rows):
-        groups = {}
-        for r in rows:
-            groups.setdefault(detect_vendor(r["model"]), []).append(r)
+        v_group = vendor_dict.setdefault(vendor, {})
+        if cv_key not in v_group:
+            disp_name = dev_meta.get("name") or cv_raw
+            rel_date = dev_meta.get("release_date") or dev_meta.get("last_updated") or ""
+            ctx = dev_meta.get("limit", {}).get("context") or local_m.get("context")
+            out = dev_meta.get("limit", {}).get("output")
+            is_reason = dev_meta.get("reasoning") if "reasoning" in dev_meta else local_m.get("reasoning", False)
+            modalities = dev_meta.get("modalities", {}) or {}
+            is_vision = ("image" in (modalities.get("input") or [])) or local_m.get("vision", False)
+            v_group[cv_key] = {
+                "key": cv_key,
+                "name": disp_name,
+                "release_date": rel_date,
+                "context": ctx,
+                "output": out,
+                "reasoning": bool(is_reason),
+                "vision": bool(is_vision),
+                "models": [],
+            }
+        v_group[cv_key]["models"].append(r)
 
-        def order_key(v):
-            return (0, VENDOR_ORDER.index(v)) if v in VENDOR_ORDER else (1, v)
-        return {v: groups[v] for v in sorted(groups, key=order_key)}
+    def version_sort_key(ver):
+        rel = ver.get("release_date") or ""
+        if re.match(r"^\d{4}(-\d{2})?(-\d{2})?$", rel):
+            return (2, rel, ver["key"])
+        m = re.search(r"(\d+(?:\.\d+)?)", ver["key"])
+        if m:
+            try:
+                return (1, f"{float(m.group(1)):08.2f}", ver["key"])
+            except Exception:
+                pass
+        return (0, rel, ver["key"])
 
-    ok_groups = group_by(ok_sorted)
-    bad_groups = group_by(sorted(bad, key=lambda x: x["model"]))
+    # 2. 生成 HTML 块
+    vendor_sections = []
+    total_version_count = 0
+    for vendor in sorted(vendor_dict.keys(), key=lambda v: (0, VENDOR_ORDER.index(v)) if v in VENDOR_ORDER else (1, v)):
+        v_versions = vendor_dict[vendor]
+        sorted_versions = sorted(v_versions.values(), key=version_sort_key, reverse=True)
+        total_version_count += len(sorted_versions)
 
-    rows_ok_tbodies = []
-    for vendor, rs in ok_groups.items():
-        body = [f'<tbody class="group" data-vendor="{html.escape(vendor)}">',
-                f'<tr class="ghead"><td colspan="12">'
-                f'<span class="gname">{html.escape(vendor)}</span>'
-                f'<span class="gcount">{len(rs)} 个</span></td></tr>']
-        for i, r in enumerate(rs):
-            mid = r["model"]
-            is_cfg = mid in configured_models
-            cfg_badge = ' <span class="tag-configured" title="已在 Pi 360 provider 中配置">⚡ 已配置</span>' if is_cfg else ""
-            tr_cls = ' class="configured"' if is_cfg else ""
-            cfg_attr = ' data-configured="1"' if is_cfg else ' data-configured="0"'
-            ttft = r.get("ttft_s")
-            ttft_cls = "dim" if ttft is None else ("fast" if ttft < 2 else ("mid" if ttft < 15 else "slow"))
-            tps = r.get("e2e_tps", 0)
-            tps_cls = "fast" if tps >= 60 else ("mid" if tps >= 25 else "slow")
-            vision = "👁" if meta_cell(mid, "vision") else ""
-            reason = "🧠" if meta_cell(mid, "reasoning") else ""
-            body.append(
-                f'<tr{tr_cls} data-vendor="{html.escape(vendor)}"{cfg_attr}>'
-                f"<td class='num'>{i + 1}</td>"
-                f"<td class='mono'>{html.escape(mid)}{cfg_badge}</td>"
-                f"<td class='dim'>{html.escape(vendor)}</td>"
-                f"<td class='dim'>{html.escape(str(meta_cell(mid, 'size')))}</td>"
-                f"<td class='dim'>{html.escape(str(meta_cell(mid, 'context')))}</td>"
-                f"<td class='dim'>{vision}{reason}</td>"
-                f"<td class='mono {ttft_cls}'>{_fmt(ttft, 's')}</td>"
-                f"<td class='mono dim'>{_fmt(r.get('first_think_s'), 's')}</td>"
-                f"<td class='mono {tps_cls}'>{_fmt(r.get('e2e_tps'))}</td>"
-                f"<td class='mono dim'>{r.get('tokens')}</td>"
-                f"<td class='mono dim'>{_fmt(r.get('total_s'), 's')}</td>"
-                f"<td class='dim'>{html.escape(str(r.get('stop_reason') or ''))}</td>"
-                f"</tr>")
-        body.append("</tbody>")
-        rows_ok_tbodies.append("".join(body))
+        v_blocks_html = []
+        for ver in sorted_versions:
+            # 组内排序：可用模型按 TPS 降序，不可用排在后面
+            ok_models = [m for m in ver["models"] if m.get("ok")]
+            bad_models = [m for m in ver["models"] if not m.get("ok")]
+            ok_models.sort(key=lambda x: x.get("e2e_tps", 0), reverse=True)
+            bad_models.sort(key=lambda x: x["model"])
+            sorted_models = ok_models + bad_models
 
-    rows_bad_tbodies = []
-    for vendor, rs in bad_groups.items():
-        body = [f'<tbody class="group" data-vendor="{html.escape(vendor)}">',
-                f'<tr class="ghead"><td colspan="5">'
-                f'<span class="gname">{html.escape(vendor)}</span>'
-                f'<span class="gcount">{len(rs)} 个</span></td></tr>']
-        for r in rs:
-            mid = r["model"]
-            is_cfg = mid in configured_models
-            cfg_badge = ' <span class="tag-configured" title="已在 Pi 360 provider 中配置">⚡ 已配置</span>' if is_cfg else ""
-            tr_cls = ' class="configured"' if is_cfg else ""
-            cfg_attr = ' data-configured="1"' if is_cfg else ' data-configured="0"'
-            body.append(
-                f'<tr{tr_cls} data-vendor="{html.escape(vendor)}"{cfg_attr}>'
-                f"<td class='mono'>{html.escape(mid)}{cfg_badge}</td>"
-                f"<td class='dim'>{html.escape(vendor)}</td>"
-                f"<td>{_badge(classify_failure(r), 'bad')}</td>"
-                f"<td class='mono dim'>{html.escape(str(r.get('status') or ''))}</td>"
-                f"<td class='dim err'>{html.escape((r.get('err') or '')[:160])}</td>"
-                f"</tr>")
-        body.append("</tbody>")
-        rows_bad_tbodies.append("".join(body))
+            # 版本规格标签
+            specs = []
+            if ver["release_date"]:
+                specs.append(f'<span class="spec-tag date" title="发布时间">📅 {html.escape(ver["release_date"])}</span>')
+            if ver["context"]:
+                specs.append(f'<span class="spec-tag ctx" title="上下文上限">🗂️ 上下文: {format_token_count(ver["context"])}</span>')
+            if ver["output"]:
+                specs.append(f'<span class="spec-tag out" title="最大输出 Tokens">📤 最大输出: {format_token_count(ver["output"])}</span>')
+            if ver["reasoning"]:
+                specs.append('<span class="spec-tag feat" title="支持思考推理">🧠 思考推理</span>')
+            if ver["vision"]:
+                specs.append('<span class="spec-tag feat" title="支持视觉/多模态输入">👁️ 视觉能力</span>')
+            specs.append(f'<span class="spec-tag count">{len(sorted_models)} 个部署</span>')
 
-    vendors = []
-    for v in list(ok_groups) + list(bad_groups):
-        if v not in vendors:
-            vendors.append(v)
+            # 表格行
+            tbody_rows = []
+            for i, r in enumerate(sorted_models):
+                mid = r["model"]
+                is_ok = r.get("ok", False)
+                is_cfg = mid in configured_models
+                cfg_badge = ' <span class="tag-configured" title="已在 Pi 360 provider 中配置">⚡ 已配置</span>' if is_cfg else ""
+                tr_cls = ' class="configured"' if is_cfg else ""
+                cfg_attr = ' data-configured="1"' if is_cfg else ' data-configured="0"'
+
+                if is_ok:
+                    status_badge = '<span class="status-ok">✅ 可用</span>'
+                    ttft = r.get("ttft_s")
+                    ttft_cls = "dim" if ttft is None else ("fast" if ttft < 2 else ("mid" if ttft < 15 else "slow"))
+                    tps = r.get("e2e_tps", 0)
+                    tps_cls = "fast bold" if tps >= 60 else (("mid bold" if tps >= 25 else "slow bold"))
+                    first_think = _fmt(r.get("first_think_s"), "s")
+                    e2e_tps = _fmt(r.get("e2e_tps"))
+                    toks = str(r.get("tokens") or "")
+                    total_t = _fmt(r.get("total_s"), "s")
+                    reason_or_err = html.escape(str(r.get("stop_reason") or ""))
+                else:
+                    status_badge = f'<span class="status-bad">❌ {html.escape(classify_failure(r))}</span>'
+                    ttft_cls = "dim"
+                    tps_cls = "dim"
+                    ttft = "-"
+                    first_think = "-"
+                    e2e_tps = "-"
+                    toks = "-"
+                    total_t = "-"
+                    reason_or_err = f'<span class="err-text" title="{html.escape(r.get("err") or "")}">{html.escape((r.get("err") or "")[:80])}</span>'
+
+                ttft_str = _fmt(ttft, "s") if isinstance(ttft, (int, float)) else str(ttft)
+
+                tbody_rows.append(
+                    f'<tr{tr_cls} data-vendor="{html.escape(vendor)}"{cfg_attr}>'
+                    f'<td class="num">{i + 1}</td>'
+                    f'<td class="mono"><span class="model-name" title="点击复制模型 ID">{html.escape(mid)}</span>{cfg_badge}</td>'
+                    f'<td>{status_badge}</td>'
+                    f'<td class="mono {ttft_cls}">{ttft_str}</td>'
+                    f'<td class="mono dim">{first_think}</td>'
+                    f'<td class="mono {tps_cls}">{e2e_tps}</td>'
+                    f'<td class="mono dim">{toks}</td>'
+                    f'<td class="mono dim">{total_t}</td>'
+                    f'<td class="dim">{reason_or_err}</td>'
+                    f'</tr>'
+                )
+
+            v_blocks_html.append(
+                f'<div class="version-card" data-vendor="{html.escape(vendor)}" data-vname="{html.escape(ver["name"].lower())}">'
+                f'  <div class="version-header">'
+                f'    <div class="version-title">'
+                f'      <span class="vname">{html.escape(ver["name"])}</span>'
+                f'      <span class="vkey mono dim">({html.escape(ver["key"])})</span>'
+                f'    </div>'
+                f'    <div class="version-specs">{" ".join(specs)}</div>'
+                f'  </div>'
+                f'  <div class="version-table-wrap">'
+                f'    <table>'
+                f'      <thead><tr>'
+                f'        <th data-n="num" style="width:36px">#</th>'
+                f'        <th>部署模型 ID</th>'
+                f'        <th>状态</th>'
+                f'        <th data-n="num">TTFT·首字</th>'
+                f'        <th data-n="num">首个思考</th>'
+                f'        <th data-n="num">端到端 TPS</th>'
+                f'        <th data-n="num">输出 Tokens</th>'
+                f'        <th data-n="num">总耗时</th>'
+                f'        <th>Stop / 备注</th>'
+                f'      </tr></thead>'
+                f'      <tbody>{"".join(tbody_rows)}</tbody>'
+                f'    </table>'
+                f'  </div>'
+                f'</div>'
+            )
+
+        vendor_sections.append(
+            f'<div class="vendor-section" data-vendor="{html.escape(vendor)}">'
+            f'  <div class="vendor-header">'
+            f'    <span class="vendor-title">{html.escape(vendor)}</span>'
+            f'    <span class="vendor-count">{len(sorted_versions)} 个版本 · {sum(len(v["models"]) for v in sorted_versions)} 个部署</span>'
+            f'  </div>'
+            f'  <div class="vendor-body">{"".join(v_blocks_html)}</div>'
+            f'</div>'
+        )
+
+    # 供应商过滤 Chips
     cfg_count = sum(1 for r in results if r["model"] in configured_models)
     cfg_chip = f'<button class="chip chip-cfg" data-v="__cfg__">⚡ 已配置 ({cfg_count})</button>' if cfg_count else ""
-    chips = '<button class="chip active" data-v="">全部</button>' + cfg_chip + "".join(
-        f'<button class="chip" data-v="{html.escape(v)}">{html.escape(v)}</button>' for v in vendors)
+    chips = '<button class="chip active" data-v="">全部供应商</button>' + cfg_chip + "".join(
+        f'<button class="chip" data-v="{html.escape(v)}">{html.escape(v)} ({len(vendor_dict[v])})</button>'
+        for v in sorted(vendor_dict.keys(), key=lambda x: (0, VENDOR_ORDER.index(x)) if x in VENDOR_ORDER else (1, x))
+    )
+
+    models_dev_status = "✅ 已同步 models.dev 元数据" if models_dev else "⚠️ models.dev 离线模式"
 
     return rf"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>模型测速报告 · {html.escape(base_url)}</title>
+<title>LiteLLM 模型测速与版本规格报告 · {html.escape(base_url)}</title>
 <style>
-  :root {{ --bg:#f6f8fa; --card:#ffffff; --border:#d0d7de; --text:#1f2328; --dim:#57606a;
-           --accent:#0969da; --green:#1a7f37; --yellow:#9a6700; --red:#cf222e; }}
+  :root {{
+    --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --text: #0f172a; --dim: #64748b;
+    --accent: #2563eb; --accent-light: #eff6ff; --green: #16a34a; --green-bg: #dcfce7;
+    --yellow: #d97706; --yellow-bg: #fef3c7; --red: #dc2626; --red-bg: #fee2e2;
+  }}
   * {{ box-sizing:border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--text);
          font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }}
-  .wrap {{ max-width:1280px; margin:0 auto; padding:32px 24px 64px; }}
-  h1 {{ font-size:22px; margin:0 0 4px; }}
-  .sub {{ color:var(--dim); font-size:13px; margin-bottom:20px; }}
-  .sub code {{ color:var(--accent); }}
-  .toolbar {{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:24px; }}
-  .toolbar input {{ padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px;
-                    background:var(--card); color:var(--text); width:240px; outline:none; }}
-  .toolbar input:focus {{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(9,105,218,.15); }}
+  .wrap {{ max-width:1380px; margin:0 auto; padding:32px 24px 80px; }}
+  h1 {{ font-size:24px; margin:0 0 6px; font-weight:700; color:var(--text); letter-spacing:-0.3px; }}
+  .sub {{ color:var(--dim); font-size:13px; margin-bottom:24px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }}
+  .sub code {{ color:var(--accent); background:var(--accent-light); padding:2px 6px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }}
+  .meta-tag {{ display:inline-block; padding:2px 8px; border-radius:6px; background:#f1f5f9; color:#475569; font-size:12px; }}
+
+  .toolbar {{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:28px; }}
+  .toolbar input {{ padding:9px 14px; border:1px solid var(--border); border-radius:8px; font-size:14px;
+                    background:var(--card); color:var(--text); width:280px; outline:none; transition:.15s; }}
+  .toolbar input:focus {{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.15); }}
   .chips {{ display:flex; gap:8px; flex-wrap:wrap; }}
-  .chip {{ padding:5px 12px; border:1px solid var(--border); border-radius:999px; background:var(--card);
-           color:var(--dim); font-size:13px; cursor:pointer; transition:.15s; }}
+  .chip {{ padding:6px 13px; border:1px solid var(--border); border-radius:999px; background:var(--card);
+           color:var(--dim); font-size:13px; cursor:pointer; transition:.15s; user-select:none; }}
   .chip:hover {{ color:var(--accent); border-color:var(--accent); }}
   .chip.active {{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }}
-  .chip-cfg {{ border-color:#54aeff; color:var(--accent); font-weight:600; }}
+  .chip-cfg {{ border-color:#93c5fd; color:var(--accent); font-weight:600; background:var(--accent-light); }}
   .chip-cfg.active {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
-  tr.configured td {{ background:#edf5ff; font-weight:500; }}
+
+  .vendor-section {{ margin-bottom:36px; }}
+  .vendor-header {{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;
+                    padding-bottom:8px; border-bottom:2px solid var(--border); }}
+  .vendor-title {{ font-size:18px; font-weight:700; color:var(--text); }}
+  .vendor-count {{ font-size:13px; color:var(--dim); }}
+
+  .version-card {{ background:var(--card); border:1px solid var(--border); border-radius:12px;
+                   margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.03); overflow:hidden; transition:box-shadow .15s; }}
+  .version-card:hover {{ box-shadow:0 4px 12px rgba(0,0,0,.06); }}
+  .version-header {{ padding:12px 18px; background:#f8fafc; border-bottom:1px solid var(--border);
+                    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }}
+  .version-title {{ display:flex; align-items:center; gap:8px; }}
+  .vname {{ font-size:15px; font-weight:700; color:var(--text); }}
+  .vkey {{ font-size:12px; color:var(--dim); }}
+  .version-specs {{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }}
+  .spec-tag {{ display:inline-block; padding:3px 9px; border-radius:6px; font-size:12px; font-weight:500; }}
+  .spec-tag.date {{ background:#fef3c7; color:#92400e; font-weight:600; }}
+  .spec-tag.ctx {{ background:#e0f2fe; color:#0369a1; }}
+  .spec-tag.out {{ background:#f3e8ff; color:#7e22ce; }}
+  .spec-tag.feat {{ background:#f1f5f9; color:#334155; }}
+  .spec-tag.count {{ background:#f8fafc; color:var(--dim); border:1px solid var(--border); }}
+
+  .version-table-wrap {{ overflow-x:auto; }}
+  table {{ border-collapse:collapse; width:100%; min-width:980px; }}
+  th, td {{ padding:9px 16px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; font-size:13px; }}
+  th {{ background:#ffffff; color:var(--dim); font-size:12px; font-weight:600; user-select:none; }}
+  tr:last-child td {{ border-bottom:none; }}
+  tr:hover td {{ background:#f8fafc; }}
+
+  tr.configured td {{ background:#f0f7ff; }}
   tr.configured td:first-child {{ border-left:3px solid var(--accent); }}
-  tr.configured:hover td {{ background:#dfedff; }}
+  tr.configured:hover td {{ background:#e0efff; }}
+
   .tag-configured {{ display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px;
-                    background:#ddf4ff; color:#0969da; border:1px solid #54aeff;
+                    background:#dbeafe; color:#1d4ed8; border:1px solid #93c5fd;
                     font-size:11px; font-weight:600; vertical-align:middle; }}
-  h2 {{ font-size:16px; margin:32px 0 12px; padding-left:10px; border-left:3px solid var(--accent); }}
-  .table-wrap {{ background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:auto;
-                 max-height:70vh; box-shadow:0 1px 2px rgba(0,0,0,.04); }}
-  table {{ border-collapse:collapse; width:100%; min-width:1040px; }}
-  th, td {{ padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }}
-  th {{ position:sticky; top:0; background:#f6f8fa; color:var(--dim); font-size:12px; font-weight:600;
-        cursor:pointer; user-select:none; z-index:2; }}
-  th:hover {{ color:var(--text); }}
-  tr:hover td {{ background:#f0f4f8; }}
-  tr.ghead td {{ background:#eef2f6; color:var(--text); font-weight:700; font-size:13px; padding:6px 12px; }}
-  .gname {{ margin-right:8px; }}
-  .gcount {{ color:var(--dim); font-weight:500; font-size:12px; }}
+  .model-name {{ cursor:pointer; border-bottom:1px dashed var(--dim); transition:.15s; font-weight:500; }}
+  .model-name:hover {{ color:var(--accent); border-bottom-color:var(--accent); }}
+
+  .status-ok {{ color:var(--green); font-weight:600; font-size:12px; }}
+  .status-bad {{ color:var(--red); font-size:12px; }}
+  .err-text {{ color:var(--red); font-size:12px; }}
+
   .mono {{ font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }}
   .num {{ color:var(--dim); font-size:12px; }}
   .dim {{ color:var(--dim); }}
-  .err {{ white-space:normal; max-width:520px; }}
+  .bold {{ font-weight:700; }}
   .fast {{ color:var(--green); }} .mid {{ color:var(--yellow); }} .slow {{ color:var(--red); }}
-  footer {{ margin-top:40px; color:var(--dim); font-size:12px; }}
+
+  .toast {{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff;
+           padding:8px 16px; border-radius:8px; font-size:13px; opacity:0; pointer-events:none;
+           transition:opacity .2s, transform .2s; z-index:999; box-shadow:0 4px 12px rgba(0,0,0,.15); }}
+  .toast.show {{ opacity:1; transform:translate(-50%, -4px); }}
+  footer {{ margin-top:48px; color:var(--dim); font-size:12px; text-align:center; padding-top:20px; border-top:1px solid var(--border); }}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🛰️ 模型测速报告</h1>
-  <div class="sub">gateway <code>{html.escape(base_url)}</code> · 生成于 {stamp}
-     · 并发 {params['concurrency']} · max_tokens {params['max_tokens']} · 总耗时 {total_sec:.0f}s</div>
+  <h1>🛰️ 模型测速与版本规格报告</h1>
+  <div class="sub">
+    <span>Gateway: <code>{html.escape(base_url)}</code></span>
+    <span class="meta-tag">生成于 {stamp}</span>
+    <span class="meta-tag">并发: {params['concurrency']} · max_tokens: {params['max_tokens']} · 耗时: {total_sec:.0f}s</span>
+    <span class="meta-tag">{models_dev_status}</span>
+    <span class="meta-tag">聚合: {total_version_count} 个模型版本 · {len(results)} 个部署节点</span>
+  </div>
 
   <div class="toolbar">
-    <input id="search" type="text" placeholder="🔍 搜索模型名…">
+    <input id="search" type="text" placeholder="🔍 搜索模型名 / 版本名 / 供应商…">
     <div id="vendorChips" class="chips">{chips}</div>
   </div>
 
-  <h2>✅ 可用模型（按供应商分组，组内按端到端 TPS 降序）</h2>
-  <div class="table-wrap"><table id="okTable">
-    <thead><tr>
-      <th data-n="num">#</th><th>模型</th><th>供应商</th><th>规模</th><th>上下文</th><th>能力</th>
-      <th data-n="num">TTFT·首字</th><th data-n="num">首个思考</th><th data-n="num">端到端TPS</th>
-      <th data-n="num">输出tok</th><th data-n="num">总耗时</th><th>stop</th>
-    </tr></thead>
-    {''.join(rows_ok_tbodies) or '<tbody><tr><td colspan="12" class="dim">无</td></tr></tbody>'}
-  </table></div>
+  <div id="sectionsContainer">
+    {''.join(vendor_sections) or '<div class="dim" style="text-align:center;padding:48px;">无测速结果</div>'}
+  </div>
 
-  <h2>❌ 不可用模型</h2>
-  <div class="table-wrap"><table id="badTable">
-    <thead><tr><th>模型</th><th>供应商</th><th>归因</th><th>状态</th><th>错误信息</th></tr></thead>
-    {''.join(rows_bad_tbodies) or '<tbody><tr><td colspan="5" class="dim">无</td></tr></tbody>'}
-  </table></div>
-
-  <footer>数据来源 /v1/models + /model/info · 脚本 scripts/speedtest.py · 端到端TPS=输出token÷总耗时</footer>
+  <footer>
+    数据来源: LiteLLM Gateway (/v1/models, /model/info) + GitHub <a href="https://github.com/anomalyco/models.dev" target="_blank" style="color:var(--accent);">anomalyco/models.dev</a> · 组内已按端到端 TPS 降序排序
+  </footer>
 </div>
+
 <script>
 let activeVendor = '';
 const search = document.getElementById('search');
+
 function applyFilters() {{
   const q = search.value.trim().toLowerCase();
   const showCfgOnly = activeVendor === '__cfg__';
-  document.querySelectorAll('table tbody.group').forEach(tb => {{
-    const vendor = tb.dataset.vendor;
-    let visible = 0;
-    tb.querySelectorAll('tr[data-vendor]').forEach(row => {{
-      const matchVendor = showCfgOnly
-        ? row.dataset.configured === '1'
-        : (activeVendor === '' || vendor === activeVendor);
-      const matchSearch = q === '' || row.innerText.toLowerCase().includes(q);
-      const ok = matchVendor && matchSearch;
-      row.style.display = ok ? '' : 'none';
-      if (ok) visible++;
+
+  document.querySelectorAll('.vendor-section').forEach(vSec => {{
+    const vendorName = vSec.dataset.vendor;
+    let vendorVisibleCards = 0;
+
+    vSec.querySelectorAll('.version-card').forEach(vCard => {{
+      const vName = vCard.dataset.vname || '';
+      let cardVisibleRows = 0;
+
+      vCard.querySelectorAll('tbody tr').forEach(row => {{
+        const isCfg = row.dataset.configured === '1';
+        const matchVendor = showCfgOnly ? isCfg : (activeVendor === '' || vendorName === activeVendor);
+        const matchSearch = q === '' || row.innerText.toLowerCase().includes(q) || vName.includes(q) || vendorName.toLowerCase().includes(q);
+        const ok = matchVendor && matchSearch;
+        row.style.display = ok ? '' : 'none';
+        if (ok) cardVisibleRows++;
+      }});
+
+      const cardOk = cardVisibleRows > 0;
+      vCard.style.display = cardOk ? '' : 'none';
+      if (cardOk) vendorVisibleCards++;
     }});
-    tb.style.display = visible > 0 ? '' : 'none';
+
+    vSec.style.display = vendorVisibleCards > 0 ? '' : 'none';
   }});
 }}
+
 search.addEventListener('input', applyFilters);
 document.querySelectorAll('#vendorChips .chip').forEach(c => {{
   c.addEventListener('click', () => {{
@@ -519,32 +740,45 @@ document.querySelectorAll('#vendorChips .chip').forEach(c => {{
     applyFilters();
   }});
 }});
-document.querySelectorAll('table').forEach(t => {{
-  const ths = t.querySelectorAll('thead th');
-  ths.forEach((th, ci) => {{
-    th.addEventListener('click', () => {{
-      const numeric = th.dataset.n === 'num';
-      const dir = th.dataset.dir === 'asc' ? -1 : 1;
-      ths.forEach(h => delete h.dataset.dir);
-      th.dataset.dir = dir === 1 ? 'asc' : 'desc';
-      t.querySelectorAll('tbody.group').forEach(tb => {{
-        const rows = Array.from(tb.querySelectorAll('tr[data-vendor]'));
-        rows.sort((a, b) => {{
-          const va = a.cells[ci].innerText.trim(), vb = b.cells[ci].innerText.trim();
-          if (numeric) {{
-            const na = parseFloat(va.replace(/[^0-9.\-]/g, ''));
-            const nb = parseFloat(vb.replace(/[^0-9.\-]/g, ''));
-            if (isNaN(na) && isNaN(nb)) return 0;
-            if (isNaN(na)) return 1;
-            if (isNaN(nb)) return -1;
-            return (na - nb) * dir;
-          }}
-          return va.localeCompare(vb, 'zh') * dir;
-        }});
-        rows.forEach(r => tb.appendChild(r));
-      }});
+
+function showToast(msg) {{
+  let t = document.getElementById('toast');
+  if (!t) {{
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.className = 'toast';
+    document.body.appendChild(t);
+  }}
+  t.innerText = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 1500);
+}}
+
+document.addEventListener('click', e => {{
+  const el = e.target.closest('.model-name');
+  if (!el) return;
+  const text = el.innerText.trim();
+  const notify = () => showToast('已复制: ' + text);
+  if (navigator.clipboard && navigator.clipboard.writeText) {{
+    navigator.clipboard.writeText(text).then(notify).catch(() => {{
+      const inp = document.createElement('input');
+      inp.value = text;
+      document.body.appendChild(inp);
+      inp.select();
+      document.execCommand('copy');
+      document.body.removeChild(inp);
+      notify();
     }});
-  }});
+  }} else {{
+    const inp = document.createElement('input');
+    inp.value = text;
+    document.body.appendChild(inp);
+    inp.select();
+    document.execCommand('copy');
+    document.body.removeChild(inp);
+    notify();
+  }}
 }});
 </script>
 </body>
@@ -654,18 +888,18 @@ def main(argv=None):
     total_sec = time.perf_counter() - t0
     render_summary(results, meta, total_sec)
 
-    # 报告落盘：默认 data/<技能名>/speedtest_YYYYMMDD.{json,html}（同日自动覆盖）
-    stamp = time.strftime("%Y%m%d")
+    # 报告落盘：默认 data/<技能名>/speedtest.{json,html}（每次运行自动覆盖）
     os.makedirs(args.report_dir, exist_ok=True)
-    out_path = args.out or os.path.join(args.report_dir, f"speedtest_{stamp}.json")
+    out_path = args.out or os.path.join(args.report_dir, "speedtest.json")
     json.dump(results, open(out_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     log(f"\nJSON 结果: {out_path}")
 
     if not args.no_html:
+        models_dev = fetch_models_dev(proxies)
         params = {"concurrency": args.concurrency, "max_tokens": args.max_tokens}
-        html_path = os.path.join(args.report_dir, f"speedtest_{stamp}.html")
+        html_path = os.path.join(args.report_dir, "speedtest.html")
         with open(html_path, "w", encoding="utf-8") as f:
-            f.write(render_html(results, meta, args.base_url, params, total_sec))
+            f.write(render_html(results, meta, args.base_url, params, total_sec, models_dev=models_dev))
         log(f"HTML 报告: {html_path}")
         if not args.no_browser:
             webbrowser.open(Path(html_path).as_uri())

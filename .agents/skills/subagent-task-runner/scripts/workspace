@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Resolve the working directory for one plan's artifacts (ledger, briefs,
+# reports, review packages). One directory per plan so concurrent plans
+# cannot collide.
+#
+# Usage: workspace PLAN_FILE
+# Output: absolute path to <repo-root>/.task-runner/<plan-basename>/
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: workspace PLAN_FILE" >&2
+  exit 2
+fi
+
+plan=$1
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+
+slug=$(basename "$plan" .md)
+[ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \
+  || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
+
+root=$(git rev-parse --show-toplevel)
+base="$root/.task-runner"
+dir="$base/$slug"
+mkdir -p "$dir"
+printf '*\n' > "$base/.gitignore"
+cd "$dir" && pwd
