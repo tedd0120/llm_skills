@@ -44,6 +44,32 @@ description: 按实现计划串行派发 subagent 执行任务，每任务后审
 - 工具调用之间最多说一句话——账本和工具结果承载记录。
 - 所有中间产物（brief、report、diff package）通过文件传递，不贴进 prompt。
 
+## 脚本运行时
+
+`scripts/workspace`、`scripts/task-brief`、`scripts/review-package` 是 Bash 脚本。准备阶段开始时解析一次 Bash 可执行文件，后续脚本调用复用其绝对路径。
+
+- POSIX shell：使用 `command -v bash`。
+- PowerShell：先使用 `Get-Command bash.exe`。若命令不存在，从 `git.exe` 所在目录反推 Git for Windows 根目录，再依次检查 `bin\bash.exe` 和 `usr\bin\bash.exe`。也检查 `%ProgramFiles%\Git\bin\bash.exe` 与 `%LOCALAPPDATA%\Programs\Git\bin\bash.exe`。
+- 找到解释器后继续当前步骤。仅在所有候选路径均不存在时报告缺少 Bash 运行时。
+
+PowerShell 解析示例：
+
+```powershell
+$gitExe = (Get-Command git.exe -ErrorAction Stop).Source
+$gitRoot = Split-Path (Split-Path $gitExe -Parent) -Parent
+$candidates = @(
+  (Get-Command bash.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1),
+  (Join-Path $gitRoot 'bin\bash.exe'),
+  (Join-Path $gitRoot 'usr\bin\bash.exe'),
+  (Join-Path $env:ProgramFiles 'Git\bin\bash.exe'),
+  (Join-Path $env:LOCALAPPDATA 'Programs\Git\bin\bash.exe')
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+$bashExe = $candidates | Select-Object -First 1
+if (-not $bashExe) { throw '找不到 Bash 运行时' }
+```
+
+将 `$skillRoot` 设为本 `SKILL.md` 所在目录。PowerShell 调用示例：`& $bashExe (Join-Path $skillRoot 'scripts\workspace') $planFile`。下文的 `scripts/...` 调用均通过已解析的 Bash 执行。
+
 ## 准备
 
 1. 按开场确认的分支策略工作。
