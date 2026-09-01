@@ -33,6 +33,9 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
    # 全量测速（默认并发 8，每模型 max_tokens 512）
    python "<skill-dir>/scripts/speedtest.py"
 
+   # 仅将本地已有报告推送到远程服务器（不重新测速）
+   python "<skill-dir>/scripts/speedtest.py" --deploy-only
+
    # 自定义网关 / 调参
    python "<skill-dir>/scripts/speedtest.py" \
      --base-url https://gateway.example.com --api-key sk-xxx \
@@ -43,16 +46,16 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
    测速默认在**仓库根目录** `data/litellm-model-speedtest/` 下生成固定命名的自包含 HTML 报告
    （`speedtest.html`，每次运行直接覆盖）与同名 JSON（`speedtest.json`）。`--report-dir` 改目录、
    `--no-html` 关闭 HTML、`--models` 只测子集。测速结束后脚本会用**默认浏览器自动打开 HTML 报告**，
-   `--no-browser` 关闭自动打开。
+   `--no-browser` 关闭自动打开。若配置了 `SPEEDTEST_DEPLOY_TARGET`，每次生成 HTML 均会自动通过 SCP 推送到云服务器对应目录。
 
 2. 读取脚本输出（测速结束后默认浏览器会自动打开 HTML 报告）：
    - 终端进度行 `[n/总] ✅/❌ 模型 TTFT … E2E tok/s …` + 汇总表（可用模型按 TTFT 升序；不可用模型带失败归因）。
    - 生成的 HTML 报告（浅色主题，自包含单文件）：
      - 自动同步 GitHub `anomalyco/models.dev` 开源数据库中的模型元信息（发布日期、上下文限制、最大输出 Tokens、思考推理、视觉等多模态能力，无价格）；
      - 自动识别并归一化模型版本（如 `360/glm-5.3`、`m3/glm-5.3`、`m3/glm-5.3-openai` 归为 `GLM-5.3` 版本，`m1/deepseek-v4-flash`、`360/deepseek-v4-flash-openai` 归为 `DeepSeek V4 Flash` 版本）；
-     - 按供应商（GLM / Kimi / DeepSeek / Qwen / Doubao / MiniMax 等）分类；每个供应商下将同一模型版本合并为专属卡片，**优先展示最新发布的版本（release_date 降序）**；
+     - 按供应商（GLM / Kimi / DeepSeek / Qwen / Doubao / MiniMax 等）分类（如 `360-qwen3-coder` 等带 `360-` 部署前缀的模型以及 `qwen-image` 均归入 Qwen 分类）；每个供应商下将同一模型版本合并为专属卡片，**优先展示最新发布的版本（release_date 降序）**；
      - **每个模型版本卡片内各部署节点按实测端到端 TPS 降序排列**，高亮对比不同后端速度；
-     - 自动读取本地 Pi（`~/.pi/agent/models.json`）中 360 provider 已配置的模型并在表格中高亮（`⚡ 已配置` 徽章 + 背景着色），点击模型名自动复制到剪贴板，顶部有「🔍 搜索模型名 / 版本名」输入框 + 供应商筛选 chips（含一键筛选「⚡ 已配置」）；打开仓库根目录 `data/litellm-model-speedtest/speedtest.html` 呈现给用户。
+     - 点击模型名自动复制到剪贴板，顶部有「🔍 搜索模型名 / 版本名」输入框 + 供应商筛选 chips；打开仓库根目录 `data/litellm-model-speedtest/speedtest.html` 或远程部署域名呈现给用户。
 
 3. 按以下口径解读，再回复用户（HTML 报告直接给文件路径，终端贴一份精简结论，并**主动询问用户是否需要为本地 Pi（360 provider）增删模型**）：
    - **首字延迟(TTFT)** = 首个可见文字 delta 时间。推理模型会先吐 `thinking_delta`，所以 TTFT 可能远大于"首个思考"时间——两个都报告。
@@ -63,6 +66,17 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 4. **增/删模型后续处理**：
    - 测速完成后用户若要求"帮我增/删模型"或"加到配置里"，默认修改本机 Pi 的全局配置 `~/.pi/agent/models.json` 中 `providers["360"].models` 列表。
    - 新增模型时参考元信息（`/model/info`）补全 `id`、`name`、`reasoning`、`input`（是否含 `image` 视觉能力）、`contextWindow` 与 `maxTokens`。
+
+5. **自动推送远程服务器（可选）**：
+   - 在仓库根目录 `.env` 中配置目标服务器与域名参数：
+     ```bash
+     SPEEDTEST_DEPLOY_TARGET=aliyun:/var/www/speedtest/index.html
+     SPEEDTEST_DEPLOY_PORT=2222
+     # SPEEDTEST_DEPLOY_KEY=~/.ssh/id_rsa
+     # SPEEDTEST_DEPLOY_URL=https://speedtest.yourdomain.com
+     ```
+   - 配置后，每次生成 HTML 报告均会自动执行 SCP 推送，并在终端打印公网链接、用默认浏览器自动打开线上页面。
+   - 命令行可用 `--deploy-only` 单独推送已有报告，用 `--no-deploy` 临时禁用推送。
 
 ## 陷阱
 

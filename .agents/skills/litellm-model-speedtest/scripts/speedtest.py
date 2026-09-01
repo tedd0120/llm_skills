@@ -28,6 +28,7 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -98,6 +99,12 @@ DEFAULT_PROXY = os.environ.get("LLM_PROXY") or os.environ.get(
 # 报告默认输出到仓库根目录 data/litellm-model-speedtest/（与 cwd 无关）
 DEFAULT_REPORT_DIR = os.environ.get(
     "LLM_REPORT_DIR", str(_repo_root() / "data" / "litellm-model-speedtest"))
+
+# 远程服务器部署配置（支持 SCP 推送）
+DEFAULT_DEPLOY_TARGET = os.environ.get("SPEEDTEST_DEPLOY_TARGET", "")
+DEFAULT_DEPLOY_PORT = int(os.environ.get("SPEEDTEST_DEPLOY_PORT", "0")) or None
+DEFAULT_DEPLOY_KEY = os.environ.get("SPEEDTEST_DEPLOY_KEY", "")
+DEFAULT_DEPLOY_URL = os.environ.get("SPEEDTEST_DEPLOY_URL", "")
 
 DEFAULT_PROMPT = "请用200字左右介绍你自己，说明你的能力和适用场景。"
 
@@ -291,16 +298,18 @@ def detect_vendor(model_id):
     """从模型名推断供应商，用于分组与筛选。"""
     m = (model_id or "").lower().split("/")[-1]   # 去路由前缀 m1/ m2/ 360/
     m = re.sub(r"-openai$", "", m)                 # 去 -openai 后缀变体
+    if m.startswith("360-"):
+        m = m[4:]
     if any(k in m for k in ("embedding", "bge", "rerank")):
         return "Embedding / 向量"
-    if any(k in m for k in ("image", "dall-e", "flux", "sdxl", "stable-diffusion")):
+    if any(k in m for k in ("dall-e", "flux", "sdxl", "stable-diffusion")):
         return "Image / 图像"
     families = [
         ("GLM / 智谱", ["glm", "chatglm", "zhipu"]),
         ("Kimi / 月之暗面", ["kimi", "moonshot"]),
         ("DeepSeek", ["deepseek"]),
-        ("360 / 智脑", ["360", "zhinao", "qihoo"]),
         ("Qwen / 阿里", ["qwen"]),
+        ("360 / 智脑", ["360", "zhinao", "qihoo"]),
         ("Doubao / 字节", ["doubao", "skylark", "bytedance", "volcengine"]),
         ("MiniMax", ["minimax", "abab"]),
         ("ChatGPT / OpenAI", ["gpt", "chatgpt", "openai", "o1", "o3", "o4"]),
@@ -310,6 +319,8 @@ def detect_vendor(model_id):
     for vendor, keys in families:
         if any(k in m for k in keys):
             return vendor
+    if "image" in m:
+        return "Image / 图像"
     return "其他"
 
 
@@ -399,7 +410,7 @@ def format_token_count(n):
     return f"{val} ({n:,})"
 
 
-def render_html(results, meta, base_url, params, total_sec, configured_models=None, models_dev=None):
+def render_html(results, meta, base_url, params, total_sec, models_dev=None):
     """生成自包含 HTML 报告：
     - 按供应商分组
     - 每个供应商下按模型版本合并（Version Block）
@@ -407,9 +418,6 @@ def render_html(results, meta, base_url, params, total_sec, configured_models=No
     - 每个版本内各部署节点按 TPS 降序排序
     - 显示上下文窗口、最大输出 token 等元信息（无价格）
     """
-    if configured_models is None:
-        configured_models = load_pi_configured_models("360")
-    configured_models = set(configured_models or ())
     models_dev = models_dev or {}
 
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -492,10 +500,6 @@ def render_html(results, meta, base_url, params, total_sec, configured_models=No
             for i, r in enumerate(sorted_models):
                 mid = r["model"]
                 is_ok = r.get("ok", False)
-                is_cfg = mid in configured_models
-                cfg_badge = ' <span class="tag-configured" title="已在 Pi 360 provider 中配置">⚡ 已配置</span>' if is_cfg else ""
-                tr_cls = ' class="configured"' if is_cfg else ""
-                cfg_attr = ' data-configured="1"' if is_cfg else ' data-configured="0"'
 
                 if is_ok:
                     status_badge = '<span class="status-ok">✅ 可用</span>'
@@ -522,9 +526,9 @@ def render_html(results, meta, base_url, params, total_sec, configured_models=No
                 ttft_str = _fmt(ttft, "s") if isinstance(ttft, (int, float)) else str(ttft)
 
                 tbody_rows.append(
-                    f'<tr{tr_cls} data-vendor="{html.escape(vendor)}"{cfg_attr}>'
+                    f'<tr data-vendor="{html.escape(vendor)}">'
                     f'<td class="num">{i + 1}</td>'
-                    f'<td class="mono"><span class="model-name" title="点击复制模型 ID">{html.escape(mid)}</span>{cfg_badge}</td>'
+                    f'<td class="mono"><span class="model-name" title="点击复制模型 ID">{html.escape(mid)}</span></td>'
                     f'<td>{status_badge}</td>'
                     f'<td class="mono {ttft_cls}">{ttft_str}</td>'
                     f'<td class="mono dim">{first_think}</td>'
@@ -574,9 +578,7 @@ def render_html(results, meta, base_url, params, total_sec, configured_models=No
         )
 
     # 供应商过滤 Chips
-    cfg_count = sum(1 for r in results if r["model"] in configured_models)
-    cfg_chip = f'<button class="chip chip-cfg" data-v="__cfg__">⚡ 已配置 ({cfg_count})</button>' if cfg_count else ""
-    chips = '<button class="chip active" data-v="">全部供应商</button>' + cfg_chip + "".join(
+    chips = '<button class="chip active" data-v="">全部供应商</button>' + "".join(
         f'<button class="chip" data-v="{html.escape(v)}">{html.escape(v)} ({len(vendor_dict[v])})</button>'
         for v in sorted(vendor_dict.keys(), key=lambda x: (0, VENDOR_ORDER.index(x)) if x in VENDOR_ORDER else (1, x))
     )
@@ -645,13 +647,6 @@ def render_html(results, meta, base_url, params, total_sec, configured_models=No
   tr:last-child td {{ border-bottom:none; }}
   tr:hover td {{ background:#f8fafc; }}
 
-  tr.configured td {{ background:#f0f7ff; }}
-  tr.configured td:first-child {{ border-left:3px solid var(--accent); }}
-  tr.configured:hover td {{ background:#e0efff; }}
-
-  .tag-configured {{ display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px;
-                    background:#dbeafe; color:#1d4ed8; border:1px solid #93c5fd;
-                    font-size:11px; font-weight:600; vertical-align:middle; }}
   .model-name {{ cursor:pointer; border-bottom:1px dashed var(--dim); transition:.15s; font-weight:500; }}
   .model-name:hover {{ color:var(--accent); border-bottom-color:var(--accent); }}
 
@@ -703,7 +698,6 @@ const search = document.getElementById('search');
 
 function applyFilters() {{
   const q = search.value.trim().toLowerCase();
-  const showCfgOnly = activeVendor === '__cfg__';
 
   document.querySelectorAll('.vendor-section').forEach(vSec => {{
     const vendorName = vSec.dataset.vendor;
@@ -714,8 +708,7 @@ function applyFilters() {{
       let cardVisibleRows = 0;
 
       vCard.querySelectorAll('tbody tr').forEach(row => {{
-        const isCfg = row.dataset.configured === '1';
-        const matchVendor = showCfgOnly ? isCfg : (activeVendor === '' || vendorName === activeVendor);
+        const matchVendor = (activeVendor === '' || vendorName === activeVendor);
         const matchSearch = q === '' || row.innerText.toLowerCase().includes(q) || vName.includes(q) || vendorName.toLowerCase().includes(q);
         const ok = matchVendor && matchSearch;
         row.style.display = ok ? '' : 'none';
@@ -813,6 +806,63 @@ def render_summary(results, meta, total_sec):
                   f"{str(m.get('provider') or ''):<10}")
 
 
+def deploy_to_server(html_path, target, port=None, key=None, public_url=None, open_browser=True):
+    """通过 scp 将 HTML 报告推送到远程服务器。
+    target 格式：'host:remote_path' 或 'user@host:remote_path'
+    """
+    if not target or ":" not in target:
+        log("推送跳过：未配置有效部署目标（格式需为 'host:remote_path' 或 'user@host:remote_path'）")
+        return False
+
+    host_part, _, path_part = target.rpartition(":")
+    log(f"\n正在推送 HTML 报告到远程服务器: {target} ...")
+
+    # 1. 尝试在远程创建目标父目录 (mkdir -p)
+    ssh_cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
+    if port:
+        ssh_cmd.extend(["-p", str(port)])
+    if key:
+        ssh_cmd.extend(["-i", os.path.expanduser(key)])
+    ssh_cmd.extend([host_part, f"mkdir -p $(dirname '{path_part}')"])
+
+    try:
+        sub = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=15)
+        if sub.returncode != 0:
+            err_msg = sub.stderr.strip() or sub.stdout.strip()
+            log(f"⚠️ 远程目录预检提示: {err_msg}")
+    except Exception as e:
+        log(f"⚠️ SSH 目录预检跳过: {e}")
+
+    # 2. 执行 scp 上传
+    scp_cmd = ["scp", "-B", "-o", "ConnectTimeout=15"]
+    if port:
+        scp_cmd.extend(["-P", str(port)])
+    if key:
+        scp_cmd.extend(["-i", os.path.expanduser(key)])
+    scp_cmd.extend([html_path, target])
+
+    try:
+        res = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
+        if res.returncode == 0:
+            log(f"✅ 成功推送到服务器: {target}")
+            if public_url:
+                log(f"🌐 公网访问地址: {public_url}")
+                if open_browser:
+                    webbrowser.open(public_url)
+            return True
+        else:
+            err = res.stderr.strip() or res.stdout.strip()
+            log(f"❌ 推送失败 (scp 退出码 {res.returncode}):\n  {err}")
+            log("提示：请确认服务器已配置 SSH 免密登录，并检查端口/私钥路径是否正确。")
+            return False
+    except FileNotFoundError:
+        log("❌ 推送失败：系统中未找到 scp 命令，请确认 OpenSSH 客户端已安装。")
+        return False
+    except Exception as e:
+        log(f"❌ 推送发生异常: {e}")
+        return False
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="LiteLLM 网关全量模型测速")
     ap.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -828,8 +878,29 @@ def main(argv=None):
                     help="HTML/JSON 报告输出目录（默认仓库根目录 data/litellm-model-speedtest）")
     ap.add_argument("--no-html", action="store_true", help="不生成 HTML 报告")
     ap.add_argument("--no-browser", action="store_true", help="不自动用默认浏览器打开 HTML 报告")
+    ap.add_argument("--deploy", action="store_true", help="强制推送到远程服务器")
+    ap.add_argument("--no-deploy", action="store_true", help="禁用推送到远程服务器")
+    ap.add_argument("--deploy-only", action="store_true", help="不测速，仅将本地已有 HTML 报告推送到服务器")
+    ap.add_argument("--deploy-target", default=DEFAULT_DEPLOY_TARGET,
+                    help="远程部署目标（如 'aliyun:/var/www/speedtest/index.html'）")
+    ap.add_argument("--deploy-port", type=int, default=DEFAULT_DEPLOY_PORT, help="SSH 端口（默认 22）")
+    ap.add_argument("--deploy-key", default=DEFAULT_DEPLOY_KEY, help="SSH 私钥路径")
+    ap.add_argument("--deploy-url", default=DEFAULT_DEPLOY_URL, help="公网访问 URL（如 'https://example.com/speedtest/'）")
     ap.add_argument("--out", default=None, help="结果 JSON 输出路径（覆盖默认）")
     args = ap.parse_args(argv)
+
+    if args.deploy_only:
+        html_path = os.path.join(args.report_dir, "speedtest.html")
+        if not os.path.isfile(html_path):
+            log(f"错误：本地 HTML 报告不存在: {html_path}，请先运行测速。")
+            return 1
+        target = args.deploy_target
+        if not target:
+            log("错误：未配置部署目标。请在 .env 中配置 SPEEDTEST_DEPLOY_TARGET 或通过 --deploy-target 传入。")
+            return 1
+        ok = deploy_to_server(html_path, target, port=args.deploy_port, key=args.deploy_key,
+                              public_url=args.deploy_url, open_browser=not args.no_browser)
+        return 0 if ok else 1
 
     if not args.api_key:
         log("错误：未提供 API key。请在仓库根目录 .env 中配置 LLM_API_KEY，或用 --api-key 传入。")
@@ -901,9 +972,17 @@ def main(argv=None):
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(render_html(results, meta, args.base_url, params, total_sec, models_dev=models_dev))
         log(f"HTML 报告: {html_path}")
-        if not args.no_browser:
+
+        deployed = False
+        should_deploy = (args.deploy or (bool(args.deploy_target) and not args.no_deploy))
+        if should_deploy:
+            deployed = deploy_to_server(html_path, args.deploy_target, port=args.deploy_port,
+                                        key=args.deploy_key, public_url=args.deploy_url,
+                                        open_browser=not args.no_browser)
+
+        if not args.no_browser and not (deployed and args.deploy_url):
             webbrowser.open(Path(html_path).as_uri())
-            log("已在默认浏览器打开 HTML 报告")
+            log("已在默认浏览器打开本地 HTML 报告")
     return 0
 
 
