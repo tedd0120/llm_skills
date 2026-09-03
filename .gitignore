@@ -4,6 +4,9 @@
 # ZCode local config (contains plaintext secrets like TAVILY_API_KEY)
 .zcode/
 
+# Pi
+.pi/
+
 # Environment variables
 .env
 settings.local.json
