@@ -293,12 +293,6 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertEqual(virtual["subtree_size"], 1)
         self.assertTrue(virtual["is_virtual"])
 
-    def test_serialize_nodes_for_frontend_c_alias(self) -> None:
-        self.assertIs(
-            tree_module._serialize_nodes_for_frontend_c,
-            tree_module._serialize_nodes_for_frontend,
-        )
-
     def test_render_org_tree_html_generates_file_without_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = Path(tmpdir) / "output.html"

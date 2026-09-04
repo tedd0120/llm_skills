@@ -179,9 +179,6 @@ def _serialize_nodes_for_frontend(
     return nodes_data, roots_data, meta
 
 
-_serialize_nodes_for_frontend_c = _serialize_nodes_for_frontend
-
-
 _HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
