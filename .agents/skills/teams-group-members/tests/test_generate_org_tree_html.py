@@ -136,9 +136,9 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertTrue(v2["is_virtual"])
         self.assertFalse(v3["is_virtual"])
 
-    def test_serialize_nodes_for_frontend_c_keys_and_values(self) -> None:
+    def test_serialize_nodes_for_frontend_keys_and_values(self) -> None:
         roots, node_map = tree_module._build_tree(self.sample_members)
-        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend_c(
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(
             node_map,
             roots,
             fetched_date="2026-03-31",
@@ -228,28 +228,28 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
 
         self.assertEqual(roots_data, [zhang_index, zhao_index, virtual_index])
 
-    def test_serialize_nodes_for_frontend_c_type_validation(self) -> None:
+    def test_serialize_nodes_for_frontend_type_validation(self) -> None:
         roots, node_map = tree_module._build_tree(self.sample_members)
 
         with self.assertRaises(TypeError):
-            tree_module._serialize_nodes_for_frontend_c("invalid_nodes", roots)  # type: ignore[arg-type]
+            tree_module._serialize_nodes_for_frontend("invalid_nodes", roots)  # type: ignore[arg-type]
 
         with self.assertRaises(TypeError):
-            tree_module._serialize_nodes_for_frontend_c(node_map, "invalid_roots")  # type: ignore[arg-type]
+            tree_module._serialize_nodes_for_frontend(node_map, "invalid_roots")  # type: ignore[arg-type]
 
         with self.assertRaises(TypeError):
-            tree_module._serialize_nodes_for_frontend_c(["not_a_dict"], roots)  # type: ignore[list-item]
+            tree_module._serialize_nodes_for_frontend(["not_a_dict"], roots)  # type: ignore[list-item]
 
         with self.assertRaises(TypeError):
-            tree_module._serialize_nodes_for_frontend_c(node_map, ["not_a_dict"])  # type: ignore[list-item]
+            tree_module._serialize_nodes_for_frontend(node_map, ["not_a_dict"])  # type: ignore[list-item]
 
         with self.assertRaises(ValueError):
-            tree_module._serialize_nodes_for_frontend_c(node_map, [{"node_id": "nonexistent"}])
+            tree_module._serialize_nodes_for_frontend(node_map, [{"node_id": "nonexistent"}])
 
-    def test_serialize_nodes_for_frontend_c_accepts_list_of_nodes(self) -> None:
+    def test_serialize_nodes_for_frontend_accepts_list_of_nodes(self) -> None:
         roots, node_map = tree_module._build_tree(self.sample_members)
         nodes_list = list(node_map.values())
-        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend_c(
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(
             nodes_list,
             roots,
             fetched_date="2026-03-31",
@@ -258,16 +258,46 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertEqual(meta["total"], len(nodes_list))
         self.assertEqual(meta["lines"], len(roots))
 
-    def test_legacy_serialize_nodes_for_frontend_backward_compatibility(self) -> None:
-        roots, node_map = tree_module._build_tree(self.sample_members)
-        nodes_json, roots_json = tree_module._serialize_nodes_for_frontend(roots, node_map)
-        nodes = json.loads(nodes_json)
-        root_ids = json.loads(roots_json)
+        zhang = next(item for item in nodes_data if item["name"] == "张三")
+        li = next(item for item in nodes_data if item["name"] == "李四")
+        wang = next(item for item in nodes_data if item["name"] == "王五")
+        virtual = next(item for item in nodes_data if item["name"] == "虚拟负责人")
 
-        self.assertEqual(len(nodes), len(self.sample_members))
-        self.assertEqual(len(root_ids), len(roots))
-        self.assertIn("node_id", nodes[0])
-        self.assertIn("parent_id", nodes[0])
+        zhang_index = nodes_data.index(zhang)
+        li_index = nodes_data.index(li)
+        wang_index = nodes_data.index(wang)
+
+        self.assertEqual(zhang["parent_index"], -1)
+        self.assertEqual(zhang["root_index"], zhang_index)
+        self.assertEqual(zhang["depth"], 0)
+        self.assertEqual(zhang["subtree_size"], 3)
+        self.assertFalse(zhang["is_virtual"])
+        self.assertIn(li_index, zhang["children"])
+
+        self.assertEqual(li["parent_index"], zhang_index)
+        self.assertEqual(li["root_index"], zhang_index)
+        self.assertEqual(li["depth"], 1)
+        self.assertEqual(li["subtree_size"], 2)
+        self.assertFalse(li["is_virtual"])
+        self.assertIn(wang_index, li["children"])
+
+        self.assertEqual(wang["parent_index"], li_index)
+        self.assertEqual(wang["root_index"], zhang_index)
+        self.assertEqual(wang["depth"], 2)
+        self.assertEqual(wang["subtree_size"], 1)
+        self.assertFalse(wang["is_virtual"])
+        self.assertEqual(wang["children"], [])
+
+        self.assertEqual(virtual["parent_index"], -1)
+        self.assertEqual(virtual["depth"], 0)
+        self.assertEqual(virtual["subtree_size"], 1)
+        self.assertTrue(virtual["is_virtual"])
+
+    def test_serialize_nodes_for_frontend_c_alias(self) -> None:
+        self.assertIs(
+            tree_module._serialize_nodes_for_frontend_c,
+            tree_module._serialize_nodes_for_frontend,
+        )
 
     def test_render_org_tree_html_generates_file_without_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -308,14 +338,16 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
 
             # 画布类与无图例色点均不出现
             self.assertNotIn("canvas-wrap", content)
-            self.assertNotIn("tree-canvas", content)
+            self.assertNotIn("treeSvg", content)
             self.assertNotIn("detail-panel", content)
             self.assertNotIn("hover-trail", content)
+            self.assertNotIn("drag-control", content)
             self.assertNotIn("vc-dot", content)
             self.assertNotIn("dot2", content)
             self.assertNotIn("WP_HUE", content)
             self.assertNotIn("WP_TOP", content)
             self.assertNotIn("accentSoft", content)
+            self.assertNotIn("—", content)
 
     def test_render_org_tree_html_empty_members(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -343,7 +375,7 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         roots, node_map = tree_module._build_tree([])
         self.assertEqual(roots, [])
         self.assertEqual(node_map, {})
-        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend_c(node_map, roots)
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(node_map, roots)
         self.assertEqual(nodes_data, [])
         self.assertEqual(roots_data, [])
         self.assertEqual(meta["total"], 0)
@@ -354,7 +386,7 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertEqual(len(roots), 1)
         self.assertEqual(roots[0]["depth"], 0)
         self.assertEqual(roots[0]["subtree_size"], 1)
-        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend_c(node_map, roots)
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(node_map, roots)
         self.assertEqual(len(nodes_data), 1)
         self.assertEqual(roots_data, [0])
         self.assertEqual(nodes_data[0]["parent_index"], -1)
@@ -376,7 +408,7 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertEqual(sizes, sorted(sizes, reverse=True))
         self.assertEqual(sum(sizes), 996)
 
-        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend_c(
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(
             node_map,
             roots,
             fetched_date="2026-03-31",

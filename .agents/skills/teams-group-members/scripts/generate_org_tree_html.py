@@ -91,7 +91,7 @@ def _node_search_text(node: dict) -> str:
     ).lower()
 
 
-def _serialize_nodes_for_frontend_c(
+def _serialize_nodes_for_frontend(
     nodes: dict[str, dict] | list[dict],
     roots: list[dict],
     fetched_date: str = "",
@@ -179,35 +179,7 @@ def _serialize_nodes_for_frontend_c(
     return nodes_data, roots_data, meta
 
 
-def _serialize_nodes_for_frontend(roots: list[dict], node_map: dict[str, dict]) -> tuple[str, str]:
-    """序列化前端使用的数据"""
-    root_ids = [node["node_id"] for node in roots]
-    nodes = []
-    for node_id in node_map:
-        node = node_map[node_id]
-        member = node.get("member", {})
-        nodes.append(
-            {
-                "node_id": node["node_id"],
-                "name": node.get("name", ""),
-                "id": node.get("id", ""),
-                "dept_name": node.get("dept_name", ""),
-                "superior": node.get("superior", ""),
-                "parent_id": node.get("parent_id", ""),
-                "children": [child["node_id"] for child in node.get("children", [])],
-                "search_text": _node_search_text(node),
-                "is_virtual": bool(node.get("is_virtual", False)),
-                "role_desc": str(member.get("role_desc", "")).strip(),
-                "bp_name": str(member.get("bpName", "")).strip(),
-                "work_place_name": str(member.get("workPlaceName", "")).strip(),
-                "user_name": str(member.get("userName", "")).strip(),
-                "sex_desc": str(member.get("sex_desc", "")).strip(),
-            }
-        )
-
-    nodes_json = json.dumps(nodes, ensure_ascii=False).replace("</", "<\\/")
-    roots_json = json.dumps(root_ids, ensure_ascii=False)
-    return nodes_json, roots_json
+_serialize_nodes_for_frontend_c = _serialize_nodes_for_frontend
 
 
 _HTML_TEMPLATE = """<!DOCTYPE html>
@@ -365,12 +337,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       scroll: new Map()
     };
 
-    const cColKey = (k) => (k === 0 ? "root" : "n" + C.path[k - 1]);
-
     function cRender(follow) {
       const cols0 = document.querySelectorAll("#orgCols .org-col");
-      cols0.forEach((el, k) => {
-        const key = el.dataset.key || cColKey(k);
+      cols0.forEach((el) => {
+        const key = el.dataset.key;
         const body = el.querySelector(".org-col-body");
         if (key && body) C.scroll.set(key, body.scrollTop);
       });
@@ -446,7 +416,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         const idText = [cur.id || "无工号", cur.role_desc].filter(Boolean).join(" · ");
         const dlFields = [
           ["部门", cur.dept_name],
-          ["上级", cur.superior || "—"],
+          ["上级", cur.superior],
           ["HRBP", cur.bp_name],
           ["办公地", cur.work_place_name],
           ["账号", cur.user_name],
@@ -560,9 +530,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def _render_html(roots: list[dict], node_map: dict[str, dict], total_count: int, fetched_date: str) -> str:
+def _render_html(roots: list[dict], node_map: dict[str, dict], fetched_date: str) -> str:
     """生成分栏钻取组织架构 HTML。"""
-    nodes_data, roots_data, meta = _serialize_nodes_for_frontend_c(node_map, roots, fetched_date)
+    nodes_data, roots_data, meta = _serialize_nodes_for_frontend(node_map, roots, fetched_date)
     nodes_json = json.dumps(nodes_data, ensure_ascii=False).replace("</", "<\\/")
     roots_json = json.dumps(roots_data, ensure_ascii=False)
     meta_json = json.dumps(meta, ensure_ascii=False).replace("</", "<\\/")
@@ -589,7 +559,6 @@ def render_org_tree_html(members: list[dict], output_path: str, fetched_date: st
     html_content = _render_html(
         roots=roots,
         node_map=node_map,
-        total_count=len(normalized_members),
         fetched_date=used_date,
     )
 
