@@ -283,6 +283,62 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
             self.assertIn("<!DOCTYPE html>", content)
             self.assertIn("张三", content)
 
+    def test_render_org_tree_html_column_drill_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "output.html"
+            tree_module.render_org_tree_html(
+                self.sample_members,
+                str(out_file),
+                fetched_date="2026-03-31",
+            )
+            content = out_file.read_text(encoding="utf-8")
+            # 结构类名
+            self.assertIn("org-app", content)
+            self.assertIn("org-head", content)
+            self.assertIn("org-kpi", content)
+            self.assertIn("org-search", content)
+            self.assertIn("org-dropdown", content)
+            self.assertIn("org-path", content)
+            self.assertIn("org-cols", content)
+            self.assertIn("org-strip", content)
+
+            # 虚拟节点样式
+            self.assertIn(".org-item.vir b", content)
+            self.assertIn("#b45309", content)
+
+            # 画布类与无图例色点均不出现
+            self.assertNotIn("canvas-wrap", content)
+            self.assertNotIn("tree-canvas", content)
+            self.assertNotIn("detail-panel", content)
+            self.assertNotIn("hover-trail", content)
+            self.assertNotIn("vc-dot", content)
+            self.assertNotIn("dot2", content)
+            self.assertNotIn("WP_HUE", content)
+            self.assertNotIn("WP_TOP", content)
+            self.assertNotIn("accentSoft", content)
+
+    def test_render_org_tree_html_empty_members(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "empty.html"
+            tree_module.render_org_tree_html([], str(out_file), fetched_date="2026-03-31")
+            content = out_file.read_text(encoding="utf-8")
+            self.assertIn("<!DOCTYPE html>", content)
+            self.assertIn("const N = [];", content)
+            self.assertIn("const ROOTS = [];", content)
+            self.assertIn('"total": 0', content)
+            self.assertIn('"lines": 0', content)
+
+    def test_render_org_tree_html_single_member(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "single.html"
+            tree_module.render_org_tree_html([{"name": "独苗"}], str(out_file), fetched_date="2026-03-31")
+            content = out_file.read_text(encoding="utf-8")
+            self.assertIn("<!DOCTYPE html>", content)
+            self.assertIn("独苗", content)
+            self.assertIn("const ROOTS = [0];", content)
+            self.assertIn('"total": 1', content)
+            self.assertIn('"lines": 1', content)
+
     def test_empty_members_handling(self) -> None:
         roots, node_map = tree_module._build_tree([])
         self.assertEqual(roots, [])
@@ -330,6 +386,21 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertEqual(meta["date"], "2026-03-31")
         self.assertEqual(len(nodes_data), 996)
         self.assertEqual(len(roots_data), 73)
+
+    def test_render_org_tree_html_real_dataset(self) -> None:
+        members_path = Path(__file__).resolve().parents[4] / "data" / "teams-group-members" / "members.json"
+        if not members_path.exists():
+            self.skipTest("真实数据文件 members.json 未就绪")
+
+        members = json.loads(members_path.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "real_output.html"
+            tree_module.render_org_tree_html(members, str(out_file), fetched_date="2026-03-31")
+            content = out_file.read_text(encoding="utf-8")
+            self.assertIn('"total": 996', content)
+            self.assertIn('"lines": 73', content)
+            self.assertIn('"date": "2026-03-31"', content)
+            self.assertIn("org-cols", content)
 
 
 if __name__ == "__main__":
