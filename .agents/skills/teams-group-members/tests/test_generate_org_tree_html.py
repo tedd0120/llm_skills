@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -165,7 +166,7 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
 
         self.assertEqual(len(nodes_data), len(self.sample_members))
         for item in nodes_data:
-            self.assertTrue(expected_keys.issubset(item.keys()))
+            self.assertEqual(set(item), expected_keys)
             self.assertIsInstance(item["depth"], int)
             self.assertIsInstance(item["subtree_size"], int)
             self.assertIsInstance(item["root_index"], int)
@@ -330,6 +331,10 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
             self.assertIn(".org-item.vir b", content)
             self.assertIn("#b45309", content)
 
+            # 搜索与空结果展示
+            self.assertIn('drop.className = "org-dropdown show";', content)
+            self.assertIn('<div class="org-drop-empty">无匹配成员</div>', content)
+
             # 画布类与无图例色点均不出现
             self.assertNotIn("canvas-wrap", content)
             self.assertNotIn("treeSvg", content)
@@ -455,6 +460,49 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
             self.assertIn('"lines": 73', content)
             self.assertIn('"date": "2026-03-31"', content)
             self.assertIn("org-cols", content)
+
+    def test_template_marker_in_member_data_renders_safely(self) -> None:
+        members = [
+            {
+                "name": "主管__ROOTS_JSON__",
+                "id": "1001",
+                "deptName": "部门__META_JSON__",
+                "role_desc": "角色__NODES_JSON__",
+                "superior": "",
+            },
+            {
+                "name": "成员__META_JSON__",
+                "id": "1002",
+                "deptName": "部门__ROOTS_JSON__",
+                "role_desc": "研发",
+                "superior": "主管__ROOTS_JSON__",
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "marker_collision.html"
+            tree_module.render_org_tree_html(members, str(out_file), fetched_date="2026-03-31")
+            content = out_file.read_text(encoding="utf-8")
+
+            self.assertIn("主管__ROOTS_JSON__", content)
+            self.assertIn("部门__META_JSON__", content)
+            self.assertIn("角色__NODES_JSON__", content)
+            self.assertIn("成员__META_JSON__", content)
+            self.assertIn("部门__ROOTS_JSON__", content)
+
+            match = re.search(r"const N = (\[.*?\]);\s*const ROOTS = (\[.*?\]);\s*const META = (\{.*?\});", content)
+            self.assertIsNotNone(match)
+            nodes = json.loads(match.group(1))
+            roots = json.loads(match.group(2))
+            meta = json.loads(match.group(3))
+
+            self.assertEqual(len(nodes), 2)
+            self.assertEqual(nodes[0]["name"], "主管__ROOTS_JSON__")
+            self.assertEqual(nodes[0]["dept_name"], "部门__META_JSON__")
+            self.assertEqual(nodes[0]["role_desc"], "角色__NODES_JSON__")
+            self.assertEqual(nodes[1]["name"], "成员__META_JSON__")
+            self.assertEqual(nodes[1]["dept_name"], "部门__ROOTS_JSON__")
+            self.assertEqual(roots, [0])
+            self.assertEqual(meta["total"], 2)
 
 
 if __name__ == "__main__":

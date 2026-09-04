@@ -4,6 +4,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -482,7 +483,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             return;
           }
           const hits = find(val).slice(0, 40);
-          drop.className = "org-dropdown" + (hits.length ? " show" : "");
+          drop.className = "org-dropdown show";
           drop.innerHTML = hits.length
             ? hits.map((i) => {
                 const n = N[i];
@@ -534,11 +535,15 @@ def _render_html(roots: list[dict], node_map: dict[str, dict], fetched_date: str
     roots_json = json.dumps(roots_data, ensure_ascii=False)
     meta_json = json.dumps(meta, ensure_ascii=False).replace("</", "<\\/")
 
-    return (
-        _HTML_TEMPLATE
-        .replace("__NODES_JSON__", nodes_json)
-        .replace("__ROOTS_JSON__", roots_json)
-        .replace("__META_JSON__", meta_json)
+    replacements = {
+        "__NODES_JSON__": nodes_json,
+        "__ROOTS_JSON__": roots_json,
+        "__META_JSON__": meta_json,
+    }
+    return re.sub(
+        r"__(NODES_JSON|ROOTS_JSON|META_JSON)__",
+        lambda m: replacements[m.group(0)],
+        _HTML_TEMPLATE,
     )
 
 
