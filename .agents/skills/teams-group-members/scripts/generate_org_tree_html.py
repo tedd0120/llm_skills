@@ -5,17 +5,19 @@ import json
 from datetime import datetime
 from html import escape
 from pathlib import Path
+from typing import Any
 
 
 def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
     """
-    根据 superior -> name 构建树
-    返回根节点列表和节点映射
+    根据 superior -> name 构建树结构。
+    返回按 subtree_size 降序排列的根节点列表与节点字典。
     """
     nodes = []
     name_to_nodes = {}
 
     for idx, member in enumerate(members):
+        is_virtual = bool(member.get("is_virtual", False)) or str(member.get("role_desc", "")).strip() == "虚拟上级"
         node = {
             "node_id": f"n{idx}",
             "name": str(member.get("name", "")).strip(),
@@ -25,7 +27,7 @@ def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
             "member": member,
             "children": [],
             "parent_id": "",
-            "is_virtual": bool(member.get("is_virtual", False)),
+            "is_virtual": is_virtual,
         }
         nodes.append(node)
         if node["name"]:
@@ -38,7 +40,6 @@ def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
         superior = node["superior"]
         parent = None
         if superior and superior in name_to_nodes:
-            # 最小实现：同名上级取第一条
             parent = name_to_nodes[superior][0]
 
         if parent and parent["node_id"] != node["node_id"]:
@@ -47,23 +48,152 @@ def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
         else:
             roots.append(node)
 
+    for root in roots:
+        stack = [(root, 0)]
+        visited = set()
+        while stack:
+            curr, depth = stack.pop()
+            if curr["node_id"] in visited:
+                continue
+            visited.add(curr["node_id"])
+            curr["depth"] = depth
+            curr["root_id"] = root["node_id"]
+            for child in curr["children"]:
+                if child["node_id"] not in visited:
+                    stack.append((child, depth + 1))
+
+    for node in nodes:
+        node.setdefault("depth", 0)
+        node.setdefault("root_id", node["node_id"])
+
+    nodes_by_depth_desc = sorted(nodes, key=lambda n: n.get("depth", 0), reverse=True)
+    for node in nodes_by_depth_desc:
+        node["subtree_size"] = 1 + sum(child.get("subtree_size", 1) for child in node["children"])
+
+    roots.sort(key=lambda r: r.get("subtree_size", 1), reverse=True)
+
     return roots, node_map
 
 
 def _node_search_text(node: dict) -> str:
     """用于前端搜索的文本"""
     member = node.get("member", {})
+    role_desc = str(node.get("role_desc") or member.get("role_desc", ""))
+    bp_name = str(node.get("bp_name") or member.get("bpName", ""))
+    work_place_name = str(node.get("work_place_name") or member.get("workPlaceName", ""))
     return " ".join(
         [
             node.get("name", ""),
             node.get("id", ""),
             node.get("dept_name", ""),
-            str(member.get("role_desc", "")),
-            str(member.get("bpName", "")),
-            str(member.get("workPlaceName", "")),
+            role_desc,
+            bp_name,
+            work_place_name,
             str(node.get("superior", "")),
         ]
     ).lower()
+
+
+def _serialize_nodes_for_frontend_c(
+    nodes: list[dict] | dict[str, dict],
+    roots: list[dict] | list[str],
+    fetched_date: str = "",
+) -> tuple[list[dict], list[int], dict[str, Any]]:
+    """
+    序列化分栏钻取前端数据。
+    返回节点数组、根索引数组和元信息字典。
+    """
+    if isinstance(nodes, dict) and isinstance(roots, list):
+        node_list = list(nodes.values())
+        root_list = roots
+    elif isinstance(nodes, list) and isinstance(roots, dict):
+        node_list = list(roots.values())
+        root_list = nodes
+    elif isinstance(nodes, list) and isinstance(roots, list) and len(nodes) < len(roots):
+        node_list = roots
+        root_list = nodes
+    elif isinstance(nodes, dict):
+        node_list = list(nodes.values())
+        root_list = roots if isinstance(roots, list) else list(roots)
+    else:
+        node_list = list(nodes)
+        root_list = list(roots)
+
+    node_id_to_index = {}
+    for idx, node in enumerate(node_list):
+        nid = node.get("node_id", f"n{idx}")
+        node_id_to_index[nid] = idx
+
+    nodes_data = []
+    for idx, node in enumerate(node_list):
+        member = node.get("member", {})
+        parent_id = node.get("parent_id", "")
+        parent_index = node_id_to_index.get(parent_id, -1) if parent_id else -1
+        root_id = node.get("root_id", "")
+        root_index = node_id_to_index.get(root_id, idx) if root_id else idx
+
+        children_indices = []
+        for child in node.get("children", []):
+            if isinstance(child, dict):
+                cid = child.get("node_id", "")
+                if cid in node_id_to_index:
+                    children_indices.append(node_id_to_index[cid])
+            elif isinstance(child, str) and child in node_id_to_index:
+                children_indices.append(node_id_to_index[child])
+            elif isinstance(child, int) and 0 <= child < len(node_list):
+                children_indices.append(child)
+
+        role_desc = str(node.get("role_desc") or member.get("role_desc", "")).strip()
+        bp_name = str(node.get("bp_name") or member.get("bpName", "")).strip()
+        work_place_name = str(node.get("work_place_name") or member.get("workPlaceName", "")).strip()
+        user_name = str(node.get("user_name") or member.get("userName", "")).strip()
+        sex_desc = str(node.get("sex_desc") or member.get("sex_desc", "")).strip()
+        is_virtual = bool(node.get("is_virtual", False)) or role_desc == "虚拟上级"
+
+        nodes_data.append(
+            {
+                "depth": int(node.get("depth", 0)),
+                "subtree_size": int(node.get("subtree_size", 1)),
+                "root_index": root_index,
+                "parent_index": parent_index,
+                "name": str(node.get("name", "")).strip(),
+                "id": str(node.get("id", "")).strip(),
+                "dept_name": str(node.get("dept_name", "")).strip(),
+                "superior": str(node.get("superior", "")).strip(),
+                "role_desc": role_desc,
+                "bp_name": bp_name,
+                "work_place_name": work_place_name,
+                "user_name": user_name,
+                "sex_desc": sex_desc,
+                "is_virtual": is_virtual,
+                "search_text": _node_search_text(node),
+                "children": children_indices,
+            }
+        )
+
+    roots_data = []
+    for r in root_list:
+        if isinstance(r, dict):
+            rid = r.get("node_id", "")
+            if rid in node_id_to_index:
+                roots_data.append(node_id_to_index[rid])
+        elif isinstance(r, str):
+            if r in node_id_to_index:
+                roots_data.append(node_id_to_index[r])
+        elif isinstance(r, int) and 0 <= r < len(nodes_data):
+            roots_data.append(r)
+
+    if not roots_data:
+        roots_data = [i for i, n in enumerate(nodes_data) if n["parent_index"] == -1]
+        roots_data.sort(key=lambda i: nodes_data[i]["subtree_size"], reverse=True)
+
+    meta = {
+        "total": len(nodes_data),
+        "lines": len(roots_data),
+        "date": fetched_date or datetime.now().strftime("%Y-%m-%d"),
+    }
+
+    return nodes_data, roots_data, meta
 
 
 def _serialize_nodes_for_frontend(roots: list[dict], node_map: dict[str, dict]) -> tuple[str, str]:
