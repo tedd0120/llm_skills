@@ -388,6 +388,34 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         self.assertEqual(meta["total"], 1)
         self.assertEqual(meta["lines"], 1)
 
+    def test_empty_superiors_handling(self) -> None:
+        members = [
+            {"name": "甲", "superior": "", "deptName": "A部"},
+            {"name": "乙", "superior": "", "deptName": "B部"},
+        ]
+        roots, node_map = tree_module._build_tree(members)
+        self.assertEqual(len(roots), 2)
+        self.assertEqual(len(node_map), 2)
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(node_map, roots)
+        self.assertEqual(len(nodes_data), 2)
+        self.assertEqual(len(roots_data), 2)
+        self.assertEqual(meta["total"], 2)
+        self.assertEqual(meta["lines"], 2)
+
+    def test_all_virtual_superiors_handling(self) -> None:
+        members = [
+            {"name": "虚1", "superior": "", "is_virtual": True, "deptName": "V1"},
+            {"name": "虚2", "superior": "", "role_desc": "虚拟上级", "deptName": "V2"},
+        ]
+        roots, node_map = tree_module._build_tree(members)
+        self.assertEqual(len(roots), 2)
+        self.assertTrue(all(r["is_virtual"] for r in roots))
+        nodes_data, roots_data, meta = tree_module._serialize_nodes_for_frontend(node_map, roots)
+        self.assertEqual(len(nodes_data), 2)
+        self.assertTrue(all(n["is_virtual"] for n in nodes_data))
+        self.assertEqual(meta["total"], 2)
+        self.assertEqual(meta["lines"], 2)
+
     def test_real_dataset_metrics_and_serialization(self) -> None:
         members_path = Path(__file__).resolve().parents[4] / "data" / "teams-group-members" / "members.json"
         if not members_path.exists():
