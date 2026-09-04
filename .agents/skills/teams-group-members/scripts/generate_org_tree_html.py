@@ -40,6 +40,7 @@ def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
         superior = node["superior"]
         parent = None
         if superior and superior in name_to_nodes:
+            # 最小实现：同名上级取第一条
             parent = name_to_nodes[superior][0]
 
         if parent and parent["node_id"] != node["node_id"]:
@@ -78,49 +79,42 @@ def _build_tree(members: list[dict]) -> tuple[list[dict], dict[str, dict]]:
 def _node_search_text(node: dict) -> str:
     """用于前端搜索的文本"""
     member = node.get("member", {})
-    role_desc = str(node.get("role_desc") or member.get("role_desc", ""))
-    bp_name = str(node.get("bp_name") or member.get("bpName", ""))
-    work_place_name = str(node.get("work_place_name") or member.get("workPlaceName", ""))
     return " ".join(
         [
             node.get("name", ""),
             node.get("id", ""),
             node.get("dept_name", ""),
-            role_desc,
-            bp_name,
-            work_place_name,
+            str(member.get("role_desc", "")),
+            str(member.get("bpName", "")),
+            str(member.get("workPlaceName", "")),
             str(node.get("superior", "")),
         ]
     ).lower()
 
 
 def _serialize_nodes_for_frontend_c(
-    nodes: list[dict] | dict[str, dict],
-    roots: list[dict] | list[str],
+    nodes: dict[str, dict] | list[dict],
+    roots: list[dict],
     fetched_date: str = "",
 ) -> tuple[list[dict], list[int], dict[str, Any]]:
     """
     序列化分栏钻取前端数据。
     返回节点数组、根索引数组和元信息字典。
     """
-    if isinstance(nodes, dict) and isinstance(roots, list):
+    if isinstance(nodes, dict):
         node_list = list(nodes.values())
-        root_list = roots
-    elif isinstance(nodes, list) and isinstance(roots, dict):
-        node_list = list(roots.values())
-        root_list = nodes
-    elif isinstance(nodes, list) and isinstance(roots, list) and len(nodes) < len(roots):
-        node_list = roots
-        root_list = nodes
-    elif isinstance(nodes, dict):
-        node_list = list(nodes.values())
-        root_list = roots if isinstance(roots, list) else list(roots)
-    else:
+    elif isinstance(nodes, list):
         node_list = list(nodes)
-        root_list = list(roots)
+    else:
+        raise TypeError("nodes 必须是 dict[str, dict] 或 list[dict]")
+
+    if not isinstance(roots, list):
+        raise TypeError("roots 必须是 list[dict]")
 
     node_id_to_index = {}
     for idx, node in enumerate(node_list):
+        if not isinstance(node, dict):
+            raise TypeError("nodes 元素必须是 dict")
         nid = node.get("node_id", f"n{idx}")
         node_id_to_index[nid] = idx
 
@@ -138,17 +132,13 @@ def _serialize_nodes_for_frontend_c(
                 cid = child.get("node_id", "")
                 if cid in node_id_to_index:
                     children_indices.append(node_id_to_index[cid])
-            elif isinstance(child, str) and child in node_id_to_index:
-                children_indices.append(node_id_to_index[child])
-            elif isinstance(child, int) and 0 <= child < len(node_list):
-                children_indices.append(child)
 
-        role_desc = str(node.get("role_desc") or member.get("role_desc", "")).strip()
-        bp_name = str(node.get("bp_name") or member.get("bpName", "")).strip()
-        work_place_name = str(node.get("work_place_name") or member.get("workPlaceName", "")).strip()
-        user_name = str(node.get("user_name") or member.get("userName", "")).strip()
-        sex_desc = str(node.get("sex_desc") or member.get("sex_desc", "")).strip()
-        is_virtual = bool(node.get("is_virtual", False)) or role_desc == "虚拟上级"
+        role_desc = str(member.get("role_desc", "")).strip()
+        bp_name = str(member.get("bpName", "")).strip()
+        work_place_name = str(member.get("workPlaceName", "")).strip()
+        user_name = str(member.get("userName", "")).strip()
+        sex_desc = str(member.get("sex_desc", "")).strip()
+        is_virtual = bool(node.get("is_virtual", False))
 
         nodes_data.append(
             {
@@ -172,20 +162,14 @@ def _serialize_nodes_for_frontend_c(
         )
 
     roots_data = []
-    for r in root_list:
-        if isinstance(r, dict):
-            rid = r.get("node_id", "")
-            if rid in node_id_to_index:
-                roots_data.append(node_id_to_index[rid])
-        elif isinstance(r, str):
-            if r in node_id_to_index:
-                roots_data.append(node_id_to_index[r])
-        elif isinstance(r, int) and 0 <= r < len(nodes_data):
-            roots_data.append(r)
-
-    if not roots_data:
-        roots_data = [i for i, n in enumerate(nodes_data) if n["parent_index"] == -1]
-        roots_data.sort(key=lambda i: nodes_data[i]["subtree_size"], reverse=True)
+    for r in roots:
+        if not isinstance(r, dict):
+            raise TypeError("roots 元素必须是 dict")
+        rid = r.get("node_id", "")
+        if rid in node_id_to_index:
+            roots_data.append(node_id_to_index[rid])
+        else:
+            raise ValueError(f"根节点 '{rid}' 不在 nodes 中")
 
     meta = {
         "total": len(nodes_data),

@@ -182,22 +182,69 @@ class GenerateOrgTreeHtmlTests(unittest.TestCase):
         zhang = next(item for item in nodes_data if item["name"] == "张三")
         li = next(item for item in nodes_data if item["name"] == "李四")
         wang = next(item for item in nodes_data if item["name"] == "王五")
+        zhao = next(item for item in nodes_data if item["name"] == "赵六")
+        virtual = next(item for item in nodes_data if item["name"] == "虚拟负责人")
 
         zhang_index = nodes_data.index(zhang)
         li_index = nodes_data.index(li)
         wang_index = nodes_data.index(wang)
+        zhao_index = nodes_data.index(zhao)
+        virtual_index = nodes_data.index(virtual)
 
         self.assertEqual(zhang["parent_index"], -1)
         self.assertEqual(zhang["root_index"], zhang_index)
+        self.assertEqual(zhang["depth"], 0)
+        self.assertEqual(zhang["subtree_size"], 3)
+        self.assertFalse(zhang["is_virtual"])
         self.assertIn(li_index, zhang["children"])
 
         self.assertEqual(li["parent_index"], zhang_index)
         self.assertEqual(li["root_index"], zhang_index)
+        self.assertEqual(li["depth"], 1)
+        self.assertEqual(li["subtree_size"], 2)
+        self.assertFalse(li["is_virtual"])
         self.assertIn(wang_index, li["children"])
 
         self.assertEqual(wang["parent_index"], li_index)
         self.assertEqual(wang["root_index"], zhang_index)
+        self.assertEqual(wang["depth"], 2)
+        self.assertEqual(wang["subtree_size"], 1)
+        self.assertFalse(wang["is_virtual"])
         self.assertEqual(wang["children"], [])
+
+        self.assertEqual(zhao["parent_index"], -1)
+        self.assertEqual(zhao["root_index"], zhao_index)
+        self.assertEqual(zhao["depth"], 0)
+        self.assertEqual(zhao["subtree_size"], 1)
+        self.assertFalse(zhao["is_virtual"])
+        self.assertEqual(zhao["children"], [])
+
+        self.assertEqual(virtual["parent_index"], -1)
+        self.assertEqual(virtual["root_index"], virtual_index)
+        self.assertEqual(virtual["depth"], 0)
+        self.assertEqual(virtual["subtree_size"], 1)
+        self.assertTrue(virtual["is_virtual"])
+        self.assertEqual(virtual["children"], [])
+
+        self.assertEqual(roots_data, [zhang_index, zhao_index, virtual_index])
+
+    def test_serialize_nodes_for_frontend_c_type_validation(self) -> None:
+        roots, node_map = tree_module._build_tree(self.sample_members)
+
+        with self.assertRaises(TypeError):
+            tree_module._serialize_nodes_for_frontend_c("invalid_nodes", roots)  # type: ignore[arg-type]
+
+        with self.assertRaises(TypeError):
+            tree_module._serialize_nodes_for_frontend_c(node_map, "invalid_roots")  # type: ignore[arg-type]
+
+        with self.assertRaises(TypeError):
+            tree_module._serialize_nodes_for_frontend_c(["not_a_dict"], roots)  # type: ignore[list-item]
+
+        with self.assertRaises(TypeError):
+            tree_module._serialize_nodes_for_frontend_c(node_map, ["not_a_dict"])  # type: ignore[list-item]
+
+        with self.assertRaises(ValueError):
+            tree_module._serialize_nodes_for_frontend_c(node_map, [{"node_id": "nonexistent"}])
 
     def test_serialize_nodes_for_frontend_c_accepts_list_of_nodes(self) -> None:
         roots, node_map = tree_module._build_tree(self.sample_members)
