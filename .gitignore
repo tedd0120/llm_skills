@@ -52,6 +52,7 @@ Thumbs.db
 
 # Data
 data/
+.prototype/
 .agent-council/
 input/
 .impeccable/

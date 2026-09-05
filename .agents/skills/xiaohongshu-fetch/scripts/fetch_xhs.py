@@ -880,7 +880,7 @@ if __name__ == "__main__":
     parser.add_argument("--safe-mode", action="store_true",
                         help="安全模式：延迟增大 2.5-3x + 随机阅读停顿，降低风控风险")
     parser.add_argument("--speed-mode", action="store_true",
-                        help="极速模式：使用正常模式 10% 的轻微随机延时（仍可能触发风控）")
+                        help="极速模式：使用正常模式 10%% 的轻微随机延时（仍可能触发风控）")
 
     args = parser.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()]

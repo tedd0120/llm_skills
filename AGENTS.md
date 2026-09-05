@@ -25,3 +25,14 @@ data/{skill 独特指定文件夹}/
 - 例如 litellm-model-speedtest 落到 `data/litellm-model-speedtest/`。
 - 脚本内用向上找 `.git` 的方式定位仓库根目录，保证输出与运行时的 cwd 无关。
 - `data/` 已在 `.gitignore` 中忽略。
+
+## Prototype 产出物默认目录
+
+所有 prototype 产出物落到仓库根目录的 `.prototype/` 下。目录结构为：
+
+```
+.prototype/{yyyyMMdd_时分秒_prototype主题}/产物
+```
+
+- `.prototype/` 已在 `.gitignore` 中忽略。
+
