@@ -5,11 +5,11 @@ description: 123云盘媒体文件规范化重命名。当用户提到"123网盘
 
 # 123云盘媒体文件规范化重命名
 
-连接 123 云盘开放平台 API，扫描视频文件，由 Claude 推断规范命名并生成方案，用户确认后批量执行改名/移动，全程可回滚。
+连接 123 云盘开放平台 API，扫描视频文件，推断符合 Emby/Jellyfin 的规范命名方案，经用户确认后批量执行改名与目录移动，全程支持断点续跑与一键回滚。
 
 ## 前置配置
 
-项目根目录 `.env`（凭证在 https://www.123pan.com/developer 申请，免审核）：
+在项目根目录 `.env` 中配置凭证（可在 123 云盘开放平台申请）：
 
 ```env
 PAN123_CLIENT_ID=你的clientID
@@ -18,64 +18,39 @@ PAN123_CLIENT_SECRET=你的clientSecret
 
 依赖：`pip install requests`
 
-## 目标命名格式（Emby/Jellyfin 标准）
+## 目标命名规范
 
-- 剧集/综艺：`剧名 (年份)/Season 01/剧名 (年份) S01E01.mkv`（综艺期数映射为集号）
+命名格式须遵循 Emby / Jellyfin 标准（详见 **[references/naming-standards.md](references/naming-standards.md)**）：
+- 剧集与综艺：`剧名 (年份)/Season 01/剧名 (年份) S01E01.mkv`
 - 电影：`片名 (年份)/片名 (年份).mkv`
-- 字幕等附属文件与视频同名（保留 `.chs` 等语言后缀）
 
-## 工作流程（Claude 按此执行）
+---
 
-脚本目录：`.claude/skills/pan123-renamer/scripts/`（cd 到此目录运行，输出在 `scripts/output/`）
+## 工作流程
 
-1. **自测连接**：`python pan123_client.py` — 验证凭证，打印用户信息和根目录
-2. **扫描**：`python scan.py`（全盘）或 `python scan.py --parent <fileId>`（试跑）→ `output/pan123_tree.json`
-3. **推断命名**：Claude 读取 tree JSON（文件多时分目录读取，勿一次全部载入上下文）。先做文件名层面的清洗：
-   - 作品名：去掉【】标签、地区、画质、来源站等噪音
-   - 类型与集号：从「01期」「第1集」「E01」「S01E01」等提取；单视频大文件通常是电影
-   - 已符合规范的跳过，不生成条目
-   - **凡是涉及"事实信息"的字段（作品正式名、首播年份、类型归类、季数、总集数/期数、是否为电影/剧集/综艺），一律必须通过 WebSearch 在 TMDB / IMDb / 豆瓣 等权威站点核实后才能填入方案，禁止凭直觉或目录名猜测。**（详见下方「媒体信息核实规则」）
-4. **出方案并确认**：生成 `output/rename_plan.json`：
-   ```json
-   {"rootId": 0, "entries": [{"fileId": 111, "oldParentId": 222,
-     "oldPath": "/【韩综】豆豆笑笑2025（韩国）/01期.mp4",
-     "newPath": "/豆豆笑笑 (2025)/Season 01/豆豆笑笑 (2025) S01E01.mp4"}],
-    "oldDirs": [{"fileId": 222, "path": "/【韩综】豆豆笑笑2025（韩国）"}]}
+脚本目录：`.agents/skills/pan123-renamer/scripts/`（输出默认存放在 `output/`）。
+
+1. **自测连接**：
+   运行 `python pan123_client.py` 验证凭证连通性，打印用户信息与根目录状态。
+2. **扫描文件树**：
+   运行 `python scan.py`（全盘）或 `python scan.py --parent <fileId>`（子目录测试）生成 `output/pan123_tree.json`。
+3. **推断规范命名**：
+   读取 tree JSON。凡涉及作品名、年份、季号、集号等事实字段，**必须阅读 [references/media-verification.md](references/media-verification.md) 通过网络核验，严禁凭直觉推断**。
+4. **生成方案并确认**：
+   输出计划文件 `output/rename_plan.json`（包含 `rootId`、`entries` 与清空目录清单 `oldDirs`），向用户呈现分组对照表，低置信度条目主动向用户确认。
+5. **执行改名**：
+   先运行带 `--dry-run` 参数的演练命令供用户确认：
+   ```bash
+   python apply.py output/rename_plan.json --dry-run
    ```
-   - `oldParentId` 取自 tree JSON 的 `parentFileId`，**必须带上**（回滚依赖）
-   - `oldDirs`：本次改名后可能清空的旧目录（原剧集所在的每一层旧目录，含被整体改掉名字的顶层目录），取自 tree JSON 的 `dirs`，**按路径深到浅排列**（叶子目录在前，方便逐层判空清理）；apply 默认会清理这些目录
-   - 向用户展示人类可读的对照表（按目录分组）；低置信度条目用 AskUserQuestion 逐条确认
-5. **执行**：先 `python apply.py output/rename_plan.json --dry-run` 给用户过目，再去掉 --dry-run 实际执行。支持断点续跑（自动跳过 rollback_log 中已完成条目）
-6. **回滚**（用户要求时）：`python rollback.py output/rollback_log.jsonl`
+   用户认可后去掉 `--dry-run` 实际执行。
+6. **回滚操作**（用户要求时）：
+   运行 `python rollback.py output/rollback_log.jsonl` 一键还原。
 
-## 媒体信息核实规则（强制）
-
-为避免乱猜导致的错误改名，**所有"事实信息"字段在写入方案前必须经过网络核实**：
-
-- **必须核实的字段**：作品正式名（中/英文）、首播年份、类型（电影 / 剧集 / 综艺 / 纪录片）、季数、总集数或总期数。
-- **核实方式**：用 `WebSearch` 搜索，优先采用以下来源的数据（按可信度排序）：
-  1. **TMDB**（themoviedb.org）—— 首选，命名规范与 Emby/Jellyfin 一致
-  2. **IMDb**（imdb.com）—— 电影/剧集权威
-  3. **豆瓣**（movie.douban.com）—— 中文译名、综艺期数补充
-  4. **维基百科 / 百度百科** —— 综艺分季、特别篇佐证
-- **搜索建议**：目录名往往带【】标签、画质、来源站等噪音，先用关键词（如片名 + "TMDB" / "IMDb" / "豆瓣"）搜索；区分同名作品时把年份、主演、出品方一并作为关键词。
-- **何时必须问用户**：
-  - WebSearch 找不到任何权威来源（小众 / 私人录制内容）
-  - 多个候选作品都能对上模糊目录名，无法确定是哪一个
-  - 综艺特别篇、年度合集等"季"的边界存疑
-
-  → 一律用 AskUserQuestion 逐条向用户确认，**绝不可自行脑补**。
-- **年份取首播年**：剧集/综艺取该季首播年（不是整剧首播年）；电影取上映年。务必以核实结果为准，目录名里的年份经常是错的（如把完结年当首播年）。
-- **综艺期数 → 集号**：核实该季总期数，确认期数连续无缺，再映射为 SxxEyy。
-- **禁止的行为**：
-  - ❌ 仅凭目录名/文件名就填写年份、季数、集数
-  - ❌ 把"看起来像"的作品名当正式名（如把别名当正名、漏掉"The"等冠词）
-  - ❌ 对找不到信息的条目"按常识补全"
-  - ❌ 跳过 WebSearch 直接出方案（即使你觉得很有把握）
+---
 
 ## 注意事项
 
-- 开放平台接口 QPS 很低（1~5），client 已内置节流，大盘扫描会较慢，属正常
-- 文件名非法字符 `" * : < > ? / \ |` 会被 apply 自动过滤
-- 执行完成后默认清理 `oldDirs` 中已清空的旧目录（移入回收站，可用 `rollback.py` 或网盘回收站找回）；非空目录会跳过。加 `--keep-old-dirs` 关闭此行为
-- 首次使用建议先选一个小目录 `--parent` 试跑完整流程再全盘执行
+- 接口 QPS 较低（1~5），客户端已内置自动限流节流，扫描大盘较慢属于正常现象。
+- 文件名中非法字符 `" * : < > ? / \ |` 在执行时由脚本自动转义清理。
+- 执行成功后，默认会将已清空的旧目录移入回收站（可随 rollback 还原）；可追加 `--keep-old-dirs` 保留空目录。

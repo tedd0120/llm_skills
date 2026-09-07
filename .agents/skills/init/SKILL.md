@@ -12,7 +12,7 @@ description: 新建项目时一键初始化 AGENTS.md 与 CLAUDE.md，配置语�
 - **双文件单真源**：`CLAUDE.md` 引用 `@AGENTS.md`，所有规则收口在 `AGENTS.md`。
 - **模板单真源**：规范正本存放在 `templates/`，脚本与说明均以此为准：
   - `templates/CLAUDE.md`：单真源入口声明。
-  - `templates/AGENTS.md`：包含语言、Git 安全红线、`docs/plans/` 阶段与状态跟踪、`.prototype/` 原型目录、代码检索与 Skill 渐进式披露通用规则。
+  - `templates/AGENTS.md`：包含语言、Git 安全红线、`docs/plans/` 阶段与状态跟踪、`.prototype/` 原型目录、代码检索与 Skill 渐进式披露（分支独立建档）通用规则。
 
 ## 执行方式
 

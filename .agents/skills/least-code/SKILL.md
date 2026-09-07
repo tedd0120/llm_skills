@@ -14,8 +14,8 @@ description: 用最少的代码把事做对。三条路：写新代码时选最�
 | 模式 | 何时进 | 干什么 |
 | :--- | :--- | :--- |
 | **写** | 要新增/修改代码 | 爬阶梯，选最小的够用解（§1–§3） |
-| **删** | 清理既有代码 /"帮我精简" | **先读 [PRUNING.md](PRUNING.md)**：锁绿灯，倒着爬阶梯 |
-| **审** | "评审一下""是不是过度设计" | **先读 [PRUNING.md](PRUNING.md)**：只列该删什么，不动手 |
+| **删** | 清理既有代码 /"帮我精简" | **先读 [references/pruning.md](references/pruning.md)**：锁绿灯，倒着爬阶梯 |
+| **审** | "评审一下""是不是过度设计" | **先读 [references/pruning.md](references/pruning.md)**：只列该删什么，不动手 |
 
 ---
 
@@ -146,7 +146,7 @@ grep -rnE '(#|//|--) ?SHORTCUT:' . --exclude-dir={.git,node_modules,dist,build}
 - [ ] 没有 `_v2`/`_final`/`_NEW` 后缀的文件——变体活在 git 分支里。没有 git 已经提供的签名、哈希锁、完整性层。
 - [ ] 被替换掉的代码和孤儿代码已经删了（没有还在生效的兼容义务的话）。
 - [ ] 非平凡逻辑留下了一个可运行的检查。**没有靠跳过、削弱、mock 把一个失败的检查改绿。**
-- [ ] （删/审模式）过了 [PRUNING.md](PRUNING.md) 的收尾条款。
+- [ ] （删/审模式）过了 [references/pruning.md](references/pruning.md) 的收尾条款。
 
 ---
 

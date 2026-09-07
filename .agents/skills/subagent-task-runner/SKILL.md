@@ -35,35 +35,9 @@ description: 按实现计划串行派发 subagent 执行任务，每任务后审
 
 表中的模型和思考强度是默认建议值。模型建议以角色为粒度：执行者配置覆盖全部实现与修复任务，任务审查者配置覆盖任务审查与限定复审。用户可以按角色调整；用户主动指定时可按单个任务覆盖。确认后的配置表写入账本，后续派发严格按此执行。
 
-### 3. Codex 展示层推荐
+### 3. Codex 展示层推荐（可选）
 
-仅当当前运行环境标识为 `codex`（大小写不敏感）时执行本节。
-
-在展示 subagent 模型与思考强度配置表时，先读取 [Codex 雷达](https://codex-reset-radar.pages.dev/) 使用的 `https://codex-reset-radar.pages.dev/data/intelligence-efficiency.json`。
-
-读取按以下顺序执行：
-
-1. 优先使用当前可用的网页工具读取完整 JSON URL。
-2. 网页工具不可用或因 URL 安全门禁拒绝深层资源时，改用当前环境允许的只读 HTTPS 客户端（如 `curl` 或 `Invoke-WebRequest`）获取响应。
-3. HTTP 状态为成功且响应可解析为 JSON 时，继续生成推荐；URL 安全门禁只表示该读取方式不可用。
-4. 所有可用读取方式均失败时跳过推荐行，继续正常流程。
-
-- 候选取 `harness == "codex"` 且包含数值 `iq`、`average_price_usd` 的模型档位。
-- 计划已限定模型族时按计划筛选；计划未限定时取接口中最新的 `gpt-*` 主模型系列。
-- 执行者推荐取 IQ ≥ 95 中价格最低的档位。
-- 任务审查者推荐取 IQ ≥ 100 中价格最低的档位。
-- 最终整体审查推荐取 IQ 最高的档位。
-- 某个门槛没有候选时，该角色取 IQ 最高的档位；三个角色可以使用同一档位。
-- 价格使用 `average_price_usd`，单位为美元/基准任务。
-- 日期使用 `source_updated_at`，只显示北京时间日期。
-
-推荐行保持单行极简格式：
-
-```text
-Codex 推荐：执行者 <档位> IQ <分数> / $<价格> · 任务审查者 <档位> IQ <分数> / $<价格> · 最终整体审查 <档位> IQ <分数> / $<价格> · 更新 <YYYY-MM-DD>
-```
-
-该行只提供展示参考，派发仍采用用户确认后的配置。缺少更新日期时跳过推荐行并继续正常流程。
+仅当当前运行环境标识为 `codex`（大小写不敏感）时执行：阅读 [references/codex-radar.md](references/codex-radar.md) 获取雷达数据并在配置表下方展示单行推荐参考。
 
 ## 行为准则
 
@@ -133,7 +107,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 - 不要并行派发多个实现者。
 - 记录实现者的 agent identity——审查有 findings 时恢复此 agent 修复。
 
-模板：[implementer.md](implementer.md)
+模板：[references/implementer.md](references/implementer.md)
 
 ### 2. 处理报告
 
@@ -155,13 +129,13 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 - spec 合规和代码质量两个判定都不可省略。
 - 审查者报告 ⚠️ 无法从 diff 验证的条目时，你自行确认——确认是真实缺口就进修复循环。
 
-模板：[reviewer.md](reviewer.md)
+模板：[references/reviewer.md](references/reviewer.md)
 
 ### 4. 修复（如有）
 
 审查报告 spec ❌ 或有 Critical/Important findings 时触发。Minor findings 记入账本留给最终审查。
 
-**只做一轮修复：** 恢复原实现者（或带 brief + report + findings 派新的），修复后运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发 [re-reviewer.md](re-reviewer.md) 做限定复审。
+**只做一轮修复：** 恢复原实现者（或带 brief + report + findings 派新的），修复后运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发 [references/re-reviewer.md](references/re-reviewer.md) 做限定复审。
 
 - 复审只验证 findings 是否修复 + 修复 diff 有无新问题。
 - **不要自己在 controller 里修代码**——上下文保持干净，且自修跳过了审查。
