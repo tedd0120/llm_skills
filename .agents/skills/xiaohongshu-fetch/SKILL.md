@@ -7,7 +7,7 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 
 > ⚠️ **内部组件** — 本组件仅由 `xiaohongshu-scraper` 内部调用，**禁止用户单独调用**。
 
-通过自动化浏览器（Playwright）抓取小红书上的帖子正文和评论区内容，输出为 raw.json 文件。支持固定关键词模式和发散模式单轮抓取，支持跨轮去重。
+通过自动化浏览器（Playwright）抓取小红书上的帖子正文和评论区内容，输出为 raw.json 文件。支持固定关键词模式和多轮模式（发散 / 总分）的单轮抓取，支持跨轮去重。
 
 ## 参数
 
@@ -17,7 +17,7 @@ description: 小红书数据抓取组件（内部，仅 scraper 调用）
 | `--max-posts` | ✅ | 帖子上限（无上限，默认 100）|
 | `--output` | ✅ | 输出文件**绝对路径**（`{OUTPUT_DIR}/raw.json`；OUTPUT_DIR 约定见 scraper 的 SKILL.md，禁止写入 skill 目录）|
 | `--search-strategy` | ❌ | 搜索策略 JSON（固定模式使用）|
-| `--seen-ids` | ❌ | 已见 ID 文件路径（发散模式跨轮去重）|
+| `--seen-ids` | ❌ | 已见 ID 文件路径（多轮模式跨轮去重）|
 | `--hyperlinks` | ❌ | 生成 `id_url_map.json`；`post_id` 与 `url` 无论是否启用都会写入 raw.json |
 | `--safe-mode` | ❌ | 安全模式：延迟增大 2.5-3x + 10% 概率随机阅读停顿（5-15s），适用于曾被风控拦截的场景 |
 | `--speed-mode` | ❌ | 极速模式：保留正常模式约 10% 的轻微随机延时，风控风险仍高于正常模式。与 `--safe-mode` 互斥，同时传入时 `--speed-mode` 优先 |
@@ -38,7 +38,7 @@ python .agents/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \
   --output "<OUTPUT_DIR>/raw.json"
 ```
 
-### 发散模式单轮
+### 多轮模式单轮（发散 / 总分）
 
 ```bash
 python .agents/skills/xiaohongshu-fetch/scripts/fetch_xhs.py \

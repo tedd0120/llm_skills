@@ -14,7 +14,7 @@ description: 小红书内容抓取与分析入口。用户提到"抓小红书"�
 - `xiaohongshu-formatter` - 美化报告格式、替换超链接占位符
 
 **披露文件**（按需阅读）：
-- [modes.md](modes.md) - 模式 A / 模式 B 的分支专属交互轮次、发散模式执行约束与决策报告格式
+- [modes.md](modes.md) - 模式 A / B / C 的分支专属交互轮次、发散与总分模式的执行约束与决策报告格式
 - [SETUP.md](SETUP.md) - 依赖安装、Cookie 文件、Linux/Xvfb 配置、故障排除
 
 ## 输出目录约定（核心要求）
@@ -52,7 +52,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
   | `factcheck` | 概率、是不是真的、会不会、靠谱吗、风险 | 事情到底是什么情况？ |
   | `explore` | 以上都不匹配，或用户明确只想了解讨论/争议全貌 | 大家在讨论什么？ |
 
-- 在模式 A 的关键词确认或模式 B 的配额确认中回显 `报告形态：<中文名>（REPORT_TYPE）`；用户一句话即可覆盖。用户不反对即沿用推断值，不再单独追问。
+- 在模式 A 的关键词确认、模式 B 的配额确认或模式 C 的宏观关键词与配额确认中回显 `报告形态：<中文名>（REPORT_TYPE）`；用户一句话即可覆盖。用户不反对即沿用推断值，不再单独追问。
 
 ### 2. 交互轮次
 
@@ -62,7 +62,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 |:----:|:-----|:-----|
 | 1 | 搜索模式选择 | 展示下方模式表，等待回复 A/B |
 | 2 | 篇数上限 | `篇数上限是多少？（默认 100，无上限）` |
-| 3..k | 分支专属轮次 | **按所选模式阅读 [modes.md](modes.md) 执行**：模式 A 为关键词衍生与确认；模式 B 为发散轮数与配额确认 |
+| 3..k | 分支专属轮次 | **按所选模式阅读 [modes.md](modes.md) 执行**：模式 A 为关键词衍生与确认；模式 B 为发散轮数与配额确认；模式 C 为宏观关键词与配额确认 |
 | k+1 | 速度模式 | 展示下方速度模式表，等待回复 S/N/Y |
 | k+2 | 超链接格式 | 展示下方超链接格式表，等待回复 A/B |
 
@@ -75,8 +75,9 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 |:----:|:-----|:-----|
 | A | 固定关键词模式 | 你先确认关键词，系统按关键词一次性执行搜索 |
 | B | 发散模式 | AI 从主题出发自动多轮搜索，每轮动态决定下一关键词 |
+| C | 总分模式 | 先用宏观关键词搜 50% 篇数，再从结果总结 top5 关键词各搜 10% 篇数 |
 
-回复 `A` 或 `B`。
+回复 `A`、`B` 或 `C`。
 ```
 
 **速度模式轮模板**：
@@ -106,7 +107,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 回复 `A` 或 `B`（默认 A）。
 ```
 
-**澄清阶段完成标志**：用户明确确认关键词（模式 A）或发散参数（模式 B，确认内容含报告形态），且完成速度模式与超链接格式选择。完成后**立即**按上方目录约定创建 OUTPUT_DIR，再进入阶段二。
+**澄清阶段完成标志**：用户明确确认搜索参数（模式 A 关键词 / 模式 B 发散参数 / 模式 C 总分参数，确认内容含报告形态），且完成速度模式与超链接格式选择。完成后**立即**按上方目录约定创建 OUTPUT_DIR，再进入阶段二。
 
 ---
 
@@ -150,6 +151,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 
 - 固定模式：单次调用 fetch → `raw.json`
 - 发散模式：多轮循环调用 fetch（每轮约束与决策报告见 [modes.md](modes.md)）→ 合并为 `raw.json`
+- 总分模式：宏观 1 轮 + top5 关键词各 1 轮，共 6 轮调用 fetch（配额与决策报告见 [modes.md](modes.md)）→ 合并为 `raw.json`
 - 启用超链接时 fetch 生成 `id_url_map.json`
 
 ### 步骤 3：生成报告 → xiaohongshu-summarize
@@ -179,6 +181,6 @@ python .agents/skills/xiaohongshu-scraper/scripts/verify_tasks.py <tasks_file_pa
 | `REPORT_TYPE` | enum | `recommend` / `plan` / `factcheck` / `explore`；由 scraper 推断、用户可覆盖 | summarize, verify_tasks |
 | `--keywords` / `--max-posts` | flag | 搜索关键词与篇数上限 | fetch |
 | `--search-strategy` | flag (JSON) | 固定模式搜索策略 | fetch |
-| `--seen-ids` | flag (path) | 发散模式跨轮去重 ID 文件 | fetch |
+| `--seen-ids` | flag (path) | 多轮模式（发散 / 总分）跨轮去重 ID 文件 | fetch |
 | `--hyperlinks` | flag | 启用超链接（fetch 生成 `id_url_map.json`，summarize 产出 `id:{post_id}` 占位符，formatter 替换为 URL） | fetch, summarize, formatter |
 | `--speed-mode` / `--safe-mode` | flag | 极速 / 安全模式，语义与优先级以 fetch 的 SKILL.md 为准。用户选择极速模式时，风控风险由其自行承担 | fetch |

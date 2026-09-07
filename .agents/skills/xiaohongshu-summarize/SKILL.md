@@ -11,7 +11,7 @@ description: 小红书数据分析报告生成组件（内部，仅 scraper 调�
 
 ## 执行流程
 
-1. 读取 raw.json，并提取 `search_time`、`posts`、`dedup`、`search_strategy` 与可选的 `divergence_path`。
+1. 读取 raw.json，并提取 `search_time`、`posts`、`dedup`、`search_strategy` 与可选的 `divergence_path` / `overview_detail_path`（多轮模式路径）。
 2. 校验 `REPORT_TYPE`；若它与用户意图或数据明显不符，说明原因并改用推断值。缺省使用 `explore`。
 3. **始终完整读取** [references/report-common.md](references/report-common.md)。
 4. 按下表**只读取一本** runbook：

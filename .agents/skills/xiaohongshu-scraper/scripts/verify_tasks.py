@@ -125,7 +125,7 @@ def _verify_report(path: Path, report_type: str, hyperlinks: bool, errors: list[
         errors.append("REPORT_SCALE: 数据规模缺少独立内容、实际分析评论或来源页面累计口径")
     decision_headings = [
         heading for heading in headings
-        if not any(skip in heading for skip in ("搜索概览", "搜索发散路径", "数据来源说明"))
+        if not any(skip in heading for skip in ("搜索概览", "搜索发散路径", "搜索总分路径", "数据来源说明"))
     ]
     expected = EXPECTED_FIRST_SECTION[report_type]
     if not decision_headings or expected not in decision_headings[0]:
