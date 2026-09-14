@@ -1,4 +1,4 @@
 interface:
-  display_name: "通用 shadcn / coss UI 工作流"
-  short_description: "结合 shadcn 与 coss 选型、Lucide 图标搜索，按项目技术栈适配与验证"
+  display_name: "通用 shadcn / coss / Loading UI 工作流"
+  short_description: "结合 shadcn、coss 与 Loading UI 选型、Lucide 图标搜索，按项目技术栈适配与验证"
   default_prompt: "使用 $shadcn-ui-workflow 修改本项目的 UI 组件。"
