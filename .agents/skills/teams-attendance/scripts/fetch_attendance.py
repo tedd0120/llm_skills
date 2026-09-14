@@ -273,9 +273,13 @@ def main():
                         default=default_month,
                         help='查询月份，格式 YYYY-MM，默认为当前月份')
     parser.add_argument('--output', '-o', type=str,
-                        default=f"data/attendance_{default_month.replace('-', '')}.csv",
+                        default=None,
                         help='CSV输出路径，默认为 data/attendance_YYYYMM.csv')
     args = parser.parse_args()
+
+    # 默认路径跟随查询月份，而非当前月份
+    if args.output is None:
+        args.output = f"data/attendance_{args.month.replace('-', '')}.csv"
 
     parsed_att_date(args.month, output_path=args.output)
 
