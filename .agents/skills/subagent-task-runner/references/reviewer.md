@@ -28,7 +28,9 @@ Subagent (general-purpose):
     **Diff file:** [DIFF_FILE]
 
     Read the diff file once — it contains commits, stat summary, and full
-    diff with context. Do not re-run git commands. Do not crawl the broader
+    diff with context. Use read and the permitted read-only Git queries.
+    Request controller execution when a restricted Git tool is unavailable.
+    Do not crawl the broader
     codebase unless evaluating a concrete named risk. Inspect outside the
     diff only for one focused check per named risk.
 
@@ -46,9 +48,9 @@ Subagent (general-purpose):
 
     ## Tests
 
-    Do not re-run the suite. Run a test only when reading the code raises a
-    specific doubt no existing run answers — a focused test, never a full
-    suite. Warnings in reported test output are findings.
+    Request a focused test from the controller only when reading the code
+    raises a specific doubt no existing run answers. Read the returned
+    result file. Warnings in reported test output are findings.
 
     ## Part 1: Spec Compliance
 

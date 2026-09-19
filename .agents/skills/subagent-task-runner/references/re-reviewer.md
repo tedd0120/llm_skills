@@ -27,7 +27,8 @@ Subagent (general-purpose):
     **Fix base:** [FIX_BASE_SHA]  **Head:** [HEAD_SHA]
     **Diff file:** [DIFF_FILE]
 
-    Read the diff file once. Do not re-run git commands.
+    Read the diff file once. Use read and the permitted read-only Git queries.
+    Request controller execution when a restricted Git tool is unavailable.
     Your review is read-only. Do not mutate working tree, index, or HEAD.
 
     ## No Subagents
@@ -42,8 +43,9 @@ Subagent (general-purpose):
 
     ## Tests
 
-    Do not re-run the suite. Confirm the fix report names covering tests
-    and shows output. Run a focused test only for a specific doubt.
+    Confirm the fix report names covering tests and shows output.
+    Request a focused test from the controller only for a specific doubt.
+    Read the returned result file.
 
     ## Output
 

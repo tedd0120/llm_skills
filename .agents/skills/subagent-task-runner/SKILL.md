@@ -1,11 +1,13 @@
 ---
 name: subagent-task-runner
-description: 按实现计划串行派发 subagent 执行任务，每任务后审查，全部完成后整体审查
+description: 按实现计划串行派发任务，支持内置 subagent 与 Pi CLI 后端，每任务后审查，全部完成后整体审查。
 ---
 
 # Subagent Task Runner
 
 按计划逐个派发独立 subagent 执行任务。每个任务：实现 → 审查 → 修复循环 → 完成。全部完成后做一次整体审查。
+
+本文的 subagent 可通过当前 runtime 的内置工具或 Pi CLI 调用。按角色选择后端，可在同一计划中混用。
 
 **核心原则：** 每任务一个新 subagent（隔离上下文）+ 任务审查（规格 + 质量）+ 最终整体审查 = 高质量、快迭代。
 
@@ -19,11 +21,13 @@ description: 按实现计划串行派发 subagent 执行任务，每任务后审
 - 在当前分支上直接工作
 - 创建新的特性分支（让用户指定分支名，或根据计划名自动建议）
 
-### 2. 模型与思考强度配置
+### 2. 后端、模型与思考强度配置
 
 读完计划后，为三个角色各推荐一组模型与推理强度，让用户确认或调整。
 
-当前 runtime 为 `codex`（大小写不敏感）时，先阅读 [references/codex-radar.md](references/codex-radar.md)。按其中规则将雷达推荐直接填入默认配置表，展示「角色、模型、推理强度、价格」；随后展示综合 IQ 与价格计算的 Top 5，列为「模型名、强度、IQ、价格」。
+先展示后端选项：`native`（当前 runtime 内置 subagent，默认）和 `pi`（本机 Pi CLI）。用户已指定的后端优先。选择或评估 `pi` 时，先阅读 [references/pi-cli.md](references/pi-cli.md)，完成 CLI 和模型探测，再生成角色建议。
+
+当前 runtime 为 `codex`（大小写不敏感）且有 `native` 角色时，先阅读 [references/codex-radar.md](references/codex-radar.md)。按其中规则为 native 角色填入默认配置，展示「角色、后端、模型、推理强度、价格」；随后展示综合 IQ 与价格计算的 Top 5，列为「模型名、强度、IQ、价格」。该排名仅用于 native 角色。Pi 角色从 `pi --list-models` 的实时清单选择 `provider/model`，价格未知时标为「暂无数据」。
 
 其他 runtime 根据整份计划的复杂度生成默认建议：
 
@@ -37,7 +41,7 @@ description: 按实现计划串行派发 subagent 执行任务，每任务后审
 └───────────────┴──────────┴──────────────┘
 ```
 
-表中的模型和思考强度是默认建议值。模型建议以角色为粒度：执行者配置覆盖全部实现与修复任务，任务审查者配置覆盖任务审查与限定复审。用户可以按角色调整；用户主动指定时可按单个任务覆盖。确认后的配置表写入账本，后续派发严格按此执行。
+在默认建议表中补齐每个角色的后端。执行者配置覆盖全部实现与修复任务，任务审查者配置覆盖任务审查与限定复审。用户可以按角色调整；用户主动指定时可按单个任务覆盖。确认后的后端、模型、思考强度和价格写入账本，后续派发严格按此执行。
 
 ## 行为准则
 
@@ -75,7 +79,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 ## 准备
 
 1. 按开场确认的分支策略工作。
-2. 运行 `scripts/workspace PLAN_FILE` 获取本计划的工作目录（git-ignored），用于存放账本、brief、report、review package。
+2. 运行 `scripts/workspace PLAN_FILE` 获取本计划的工作目录 `data/subagent-task-runner/<plan-basename>/`（git-ignored），用于存放账本、brief、report、review package 和 Pi 调用产物。恢复旧计划时先将对应 `.task-runner/<plan-basename>/` 迁入该目录；两处均存在时先核对账本再决定恢复来源。
 3. 检查 `<workspace>/progress.md`：若首行指向本计划文件且有 `Task <N>: complete` 行，跳过已完成的任务；否则新建账本，首行 `# Ledger — plan: <plan file path>`。
 4. 读一遍计划，为每个任务建一条 todo。若计划引用了 spec，也读——spec 是权威，计划是论证。
 5. 开始前扫描任务间冲突：共享文件、接口矛盾、与全局约束的冲突。输出为表格写入账本。有冲突先裁决再动手。
@@ -86,7 +90,20 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 
 每个 subagent 按角色使用账本配置：实现与修复使用执行者配置，任务审查与限定复审使用任务审查者配置，最终整体审查使用最终整体审查配置。派发时显式指定，不要默认继承 controller 的模型。
 
-如果某个任务的实际复杂度与预判不符（比如看似机械但实际需要多文件协调），可以临时升级，但需在账本记录偏差原因。
+如果某个任务的实际复杂度与预判不符（比如看似机械但实际需要多文件协调），提出升级建议，确认后将配置与偏差原因写入账本。
+
+## 后端派发
+
+- `native`：使用当前 runtime 的派发、等待和恢复工具，记录返回的 agent ID。
+- `pi`：按 [references/pi-cli.md](references/pi-cli.md) 调用 CLI，记录 session 文件绝对路径。实现、修复、任务审查、限定复审和最终审查均使用该入口。
+- 两个后端共用下文的角色模板和报告契约。模板中的 `Subagent` 外层表示派发元数据；Pi 的 prompt 文件只写 `prompt` 正文。
+- 后端或模型不可用时记录阻塞原因；更换配置须取得用户确认。每次派发完成后再进入报告处理。
+
+### 角色工具权限
+
+执行者（实现与修复）使用 full tool，即所选后端提供的完整工具集。操作范围遵循用户授权和仓库指引。
+
+任务审查、限定复审和最终审查仅使用 `read` 与 Git 只读命令。Git 查询限于 `status`、`diff`、`log`、`show`、`rev-parse`、`rev-list`、`merge-base`、`ls-files`，参数须用于读取；禁用外部 diff、textconv 和写文件参数。使用后端提供的受限命令工具执行这些查询。后端无法按命令约束 shell 时，由 controller 代执行查询并保存结果供审查者读取。针对性测试也由 controller 执行。
 
 ## 任务循环
 
@@ -135,7 +152,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 
 审查报告 spec ❌ 或有 Critical/Important findings 时触发。Minor findings 记入账本留给最终审查。
 
-**只做一轮修复：** 恢复原实现者（或带 brief + report + findings 派新的），修复后运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发 [references/re-reviewer.md](references/re-reviewer.md) 做限定复审。
+**只做一轮修复：** 派发前记录 `FIX_BASE = git rev-parse HEAD`。恢复原实现者（或带 brief + report + findings 派新的），修复后运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发 [references/re-reviewer.md](references/re-reviewer.md) 做限定复审。
 
 - 复审只验证 findings 是否修复 + 修复 diff 有无新问题。
 - **不要自己在 controller 里修代码**——上下文保持干净，且自修跳过了审查。
@@ -154,7 +171,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 
 ## 最终审查
 
-所有任务完成后，运行 `scripts/review-package PLAN_FILE MERGE_BASE HEAD`（`MERGE_BASE = git merge-base main HEAD`），用最强模型派发整体代码审查。指向账本中的 deferred minors 和 parked findings。
+所有任务完成后，运行 `scripts/review-package PLAN_FILE MERGE_BASE HEAD`（`MERGE_BASE = git merge-base main HEAD`），按账本中的最终整体审查配置派发整体代码审查。指向账本中的 deferred minors 和 parked findings。
 
 如有 findings，派 **一个** 修复 subagent 处理全部（不要每条 finding 一个 fixer），然后做一次限定复审。残余 findings 逐条裁决写入账本。
 
@@ -201,7 +218,7 @@ Re-reviewer: 2 addressed, 0 open, no new breakage
 ...
 
 [所有任务完成]
-[review-package MERGE_BASE HEAD → dispatch final reviewer (最强模型)]
+[review-package MERGE_BASE HEAD → dispatch final reviewer (账本配置)]
 Final reviewer: clean, deferred minors triaged — none block merge
 
 [删除 workspace，汇报裁决，让用户决定合并]
