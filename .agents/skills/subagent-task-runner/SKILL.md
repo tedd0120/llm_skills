@@ -9,7 +9,7 @@ description: 按实现计划串行派发任务，支持内置 subagent 与 Pi CL
 
 本文的 subagent 可通过当前 runtime 的内置工具或 Pi CLI 调用。按角色选择后端，可在同一计划中混用。
 
-**核心原则：** 每任务一个新 subagent（隔离上下文）+ 任务审查（规格 + 质量）+ 最终整体审查 = 高质量、快迭代。
+**核心原则：** 每任务一个新 subagent（隔离上下文）+ 任务审查（规格 + 质量）+ 最终整体审查与统一修复 = 高质量、快迭代。
 
 ## 开场确认
 
@@ -23,7 +23,7 @@ description: 按实现计划串行派发任务，支持内置 subagent 与 Pi CL
 
 ### 2. 后端、模型与思考强度配置
 
-读完计划后，为三个角色各推荐一组模型与推理强度，让用户确认或调整。
+读完计划后，为四个角色各推荐一组模型与推理强度，让用户确认或调整。
 
 先展示后端选项：`native`（当前 runtime 内置 subagent，默认）和 `pi`（本机 Pi CLI）。用户已指定的后端优先。选择或评估 `pi` 时，先阅读 [references/pi-cli.md](references/pi-cli.md)，完成 CLI 和模型探测，再生成角色建议。
 
@@ -37,11 +37,12 @@ description: 按实现计划串行派发任务，支持内置 subagent 与 Pi CL
 ├───────────────┼──────────┼──────────────┤
 │ 执行者         │ sonnet   │ high         │
 │ 任务审查者      │ sonnet   │ high         │
-│ 最终整体审查    │ opus     │ high         │
+│ 最终执行者      │ opus     │ high         │
+│ 最终审查者      │ opus     │ high         │
 └───────────────┴──────────┴──────────────┘
 ```
 
-在默认建议表中补齐每个角色的后端。执行者配置覆盖全部实现与修复任务，任务审查者配置覆盖任务审查与限定复审。用户可以按角色调整；用户主动指定时可按单个任务覆盖。确认后的后端、模型、思考强度和价格写入账本，后续派发严格按此执行。
+在默认建议表中补齐每个角色的后端。执行者配置覆盖每阶段的执行与执行2，任务审查者配置覆盖评审与评审2，最终执行者配置覆盖最终阶段的执行2，最终审查者配置覆盖整体审查。用户可以按角色调整；用户主动指定时可按单个任务覆盖。确认后的后端、模型、思考强度和价格写入账本，后续派发严格按此执行。
 
 ## 行为准则
 
@@ -88,7 +89,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 
 ## 模型选择
 
-每个 subagent 按角色使用账本配置：实现与修复使用执行者配置，任务审查与限定复审使用任务审查者配置，最终整体审查使用最终整体审查配置。派发时显式指定，不要默认继承 controller 的模型。
+每个 subagent 按角色使用账本配置：执行与执行2 用执行者配置，评审与评审2 用任务审查者配置，最终阶段的执行2 用最终执行者配置，整体审查用最终审查者配置。派发时显式指定，不要默认继承 controller 的模型。
 
 如果某个任务的实际复杂度与预判不符（比如看似机械但实际需要多文件协调），提出升级建议，确认后将配置与偏差原因写入账本。
 
@@ -168,12 +169,12 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 
 ## 最终审查
 
-所有任务完成后，运行 `scripts/review-package PLAN_FILE MERGE_BASE HEAD`（`MERGE_BASE = git merge-base main HEAD`），按账本中的最终整体审查配置派发整体代码审查。审查范围覆盖全部提交，并指向账本中所有 carry-to-final 与 Minor 条目。
+所有任务完成后，运行 `scripts/review-package PLAN_FILE MERGE_BASE HEAD`（`MERGE_BASE = git merge-base main HEAD`），按账本中的最终审查者配置派发整体代码审查。审查范围覆盖全部提交，并指向账本中所有 carry-to-final 与 Minor 条目。
 
 最终阶段沿用同一形态：整体审查（评审）→ 执行2 → 评审2。
 
-1. 派 **一个** 修复 subagent 处理全部 findings——整体审查 findings 加账本遗留条目（不要每条 finding 一个 fixer）。记录 `FIX_BASE = git rev-parse HEAD`。
-2. 运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发限定复审做评审2。
+1. 按账本中的最终执行者配置派 **一个** 修复 subagent 处理全部 findings——整体审查 findings 加账本遗留条目（不要每条 finding 一个 fixer）。记录 `FIX_BASE = git rev-parse HEAD`。
+2. 运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，按账本中的任务审查者配置派发限定复审做评审2。
 3. 评审2 后仍未解决的条目逐条裁决写入账本，并在收尾汇报中原样呈现——此处没有下一阶段可承接。
 
 ## 收尾

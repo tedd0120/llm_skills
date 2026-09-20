@@ -5,7 +5,7 @@
 ```
 Subagent (general-purpose):
   description: "Re-review Task N fix round R"
-  model: [MODEL — 必须显式指定，小修复用便宜档]
+  model: [MODEL — 必须显式指定，按账本中的任务审查者配置]
   prompt: |
     You are re-reviewing a fix round. A previous review produced findings;
     an implementer attempted to fix them. Verdict each finding and inspect
@@ -66,7 +66,7 @@ Subagent (general-purpose):
 ```
 
 **占位符：**
-- `[MODEL]` — 小修复用便宜-中档
+- `[MODEL]` — 按账本中的任务审查者配置
 - `[BRIEF_FILE]` — 同一份 brief
 - `[FINDINGS]` — 上次审查的 Critical/Important findings，逐条
 - `[REPORT_FILE]` — 实现者的报告（修复报告追加在末尾）
