@@ -37,10 +37,12 @@ Subagent (general-purpose):
     While iterating, run the focused test for what you're changing; run the
     full suite once before committing, not after every edit.
 
-    ## No Subagents
+    ## No Subagents, No Background Tasks
 
-    Do all work yourself. Never spawn a subagent — not for implementation,
-    not for review. Review is the controller's job after you report.
+    Do all work yourself, in this session. Never spawn a subagent, and never
+    hand work to a background task — run every command in the foreground and
+    wait for it to finish before moving on. Review is the controller's job
+    after you report.
 
     ## Code Organization
 

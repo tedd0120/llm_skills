@@ -18,6 +18,20 @@
 
 实现者每个任务使用全新的 session 文件。修复与补充上下文使用该任务已有的 session 文件。每次审查使用独立的新 session 文件。把后端、模型、强度、session 路径和调用产物路径记录到账本。
 
+## 子进程禁用后台任务
+
+宿主如何启动 `pi` 不设限制：前台或后台、用什么等待与恢复工具由宿主决定，退出状态按「结果验收与恢复」判定。
+
+约束落在子进程：实现与修复的命令带 `--exclude-tools` 与后台任务工具清单，使 pi 里的 agent 干活时不能把工作推给后台任务。
+
+`BGTASK_TOOLS` 由 pi-background-tasks 的 `bg_*` / `fusion_*` 与 pi-subagents 的 `Agent` / `SubagentWorkflow` 组成，写成单个逗号分隔字符串：
+
+```
+bg_run,bg_run_pi_attested,bg_delegate,bg_result,bg_status,bg_logs,bg_kill,fusion_brainstorm,fusion_investigate,fusion_reason,fusion_research,fusion_validate,fusion_web_fetch,Agent,SubagentWorkflow
+```
+
+`Agent` 默认后台运行，`SubagentWorkflow` 始终后台，故一并禁用。本机扩展清单会变，调用前用 `pi --help` 与已装扩展核对工具名；`--exclude-tools` 按名称过滤，未知名称被忽略。
+
 ## 调用
 
 以目标代码工作目录为 cwd。以下变量均在调用前按账本配置赋值，文件路径使用绝对路径。`promptFile` 是本次角色 prompt；`sessionFile` 是该角色的 session 文件。
@@ -58,10 +72,10 @@ exit_code=$?
 
 | 角色 | 参数 |
 |------|-------|
-| 实现、修复 | 空数组，使用 full tool |
+| 实现、修复 | `--exclude-tools` 加 `BGTASK_TOOLS` 清单，其余保留后端完整工具集 |
 | 任务审查、限定复审、最终审查 | `--no-extensions --no-skills --no-prompt-templates --no-context-files --tools read` |
 
-PowerShell 使用 `$roleArgs = @()` 或由上述审查参数组成的字符串数组；Bash 使用 `role_args=()` 或对应参数数组。执行者保留后端提供的完整工具集及扩展工具。操作范围遵循用户授权及仓库指引。
+PowerShell 用 `$roleArgs = @('--exclude-tools', $bgtaskTools)` 或上述审查参数组成的字符串数组；Bash 用 `role_args=(--exclude-tools "$bgtask_tools")` 或对应参数数组。审查角色的 `--tools read` allowlist 已排除后台任务。操作范围遵循用户授权及仓库指引。
 
 Pi 内置工具缺少专用的 Git 只读入口，因此审查调用只开放 `read`。所需 Git 只读查询按主文档的角色工具权限交由 controller 执行，再将结果文件交给审查者。针对性测试也由 controller 执行。审查者把完整报告作为最终文本返回，由 controller 提取并写入本次审查报告文件。
 

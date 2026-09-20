@@ -95,13 +95,13 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 ## 后端派发
 
 - `native`：使用当前 runtime 的派发、等待和恢复工具，记录返回的 agent ID。
-- `pi`：按 [references/pi-cli.md](references/pi-cli.md) 调用 CLI，记录 session 文件绝对路径。实现、修复、任务审查、限定复审和最终审查均使用该入口。
+- `pi`：按 [references/pi-cli.md](references/pi-cli.md) 调用 CLI，记录 session 文件绝对路径。实现、修复、任务审查、限定复审和最终审查均使用该入口。命令禁用 pi 子进程的后台任务工具。
 - 两个后端共用下文的角色模板和报告契约。模板中的 `Subagent` 外层表示派发元数据；Pi 的 prompt 文件只写 `prompt` 正文。
 - 后端或模型不可用时记录阻塞原因；更换配置须取得用户确认。每次派发完成后再进入报告处理。
 
 ### 角色工具权限
 
-执行者（实现与修复）使用 full tool，即所选后端提供的完整工具集。操作范围遵循用户授权和仓库指引。
+执行者（实现与修复）使用 full tool，即所选后端提供的完整工具集（pi 后端按 [references/pi-cli.md](references/pi-cli.md) 去掉后台任务工具）。操作范围遵循用户授权和仓库指引。
 
 任务审查、限定复审和最终审查仅使用 `read` 与 Git 只读命令。Git 查询限于 `status`、`diff`、`log`、`show`、`rev-parse`、`rev-list`、`merge-base`、`ls-files`，参数须用于读取；禁用外部 diff、textconv 和写文件参数。使用后端提供的受限命令工具执行这些查询。后端无法按命令约束 shell 时，由 controller 代执行查询并保存结果供审查者读取。针对性测试也由 controller 执行。
 
@@ -144,36 +144,37 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 - 不要预判 findings——prompt 里不写"不要标记 X"。
 - 不要让审查者重跑实现者已跑的测试。
 - spec 合规和代码质量两个判定都不可省略。
-- 审查者报告 ⚠️ 无法从 diff 验证的条目时，你自行确认——确认是真实缺口就进修复循环。
+- 审查者报告 ⚠️ 无法从 diff 验证的条目时，你自行确认——确认是真实缺口就进执行2。
 
 模板：[references/reviewer.md](references/reviewer.md)
 
-### 4. 修复（如有）
+### 4. 执行2 与 评审2（评审未通过时）
 
-审查报告 spec ❌ 或有 Critical/Important findings 时触发。Minor findings 记入账本留给最终审查。
+一个任务就是一个阶段，固定形态：**执行 → 评审 → 执行2 → 评审2**。执行2 仅在评审未通过时发生。
 
-**只做一轮修复：** 派发前记录 `FIX_BASE = git rev-parse HEAD`。恢复原实现者（或带 brief + report + findings 派新的），修复后运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发 [references/re-reviewer.md](references/re-reviewer.md) 做限定复审。
+评审报告 spec ❌ 或有 Critical/Important findings 时触发执行2。派发前记录 `FIX_BASE = git rev-parse HEAD`。恢复原实现者（或带 brief + report + findings 派新的），修复后运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发 [references/re-reviewer.md](references/re-reviewer.md) 做评审2。
 
-- 复审只验证 findings 是否修复 + 修复 diff 有无新问题。
+- 评审2 只验证 findings 是否修复 + 修复 diff 有无新问题。
 - **不要自己在 controller 里修代码**——上下文保持干净，且自修跳过了审查。
-- 复审后仍有未解决的 findings，逐条裁决写入账本：
-  - 审查者有误 / 可争议 → park with ruling
-  - 真实但无下游依赖 → park with ruling, 标记 deferred
-  - 真实且 load-bearing → 裁决最小变更，carry 到下一任务的 dispatch
+- 一个阶段至多一次执行2。Minor findings 也留在账本，不在本阶段处理。
 
-### 5. 完成任务
+### 5. 收尾该阶段并强制推进
 
-写入账本：
-- `Task <N>: complete (commits <base7>..<head7>, review clean)`
-- `Task <N>: complete (commits <base7>..<head7>, <K> parked)` （breaker 后）
+- 评审通过 → 账本记 `Task <N>: complete (commits <base7>..<head7>, review clean)`。
+- 评审2 仍未通过 → **强制进入下一阶段**，不再修复。全部未解决 findings 逐条写入账本并标记 `carry-to-final`，附 `Ruling: 强制推进 — <理由> — <判断错误的代价>`。
+- 账本中所有未解决条目（Minor 与 carry-to-final）统一在最终阶段解决。
 
 标记 todo 完成，进入下一任务。
 
 ## 最终审查
 
-所有任务完成后，运行 `scripts/review-package PLAN_FILE MERGE_BASE HEAD`（`MERGE_BASE = git merge-base main HEAD`），按账本中的最终整体审查配置派发整体代码审查。指向账本中的 deferred minors 和 parked findings。
+所有任务完成后，运行 `scripts/review-package PLAN_FILE MERGE_BASE HEAD`（`MERGE_BASE = git merge-base main HEAD`），按账本中的最终整体审查配置派发整体代码审查。审查范围覆盖全部提交，并指向账本中所有 carry-to-final 与 Minor 条目。
 
-如有 findings，派 **一个** 修复 subagent 处理全部（不要每条 finding 一个 fixer），然后做一次限定复审。残余 findings 逐条裁决写入账本。
+最终阶段沿用同一形态：整体审查（评审）→ 执行2 → 评审2。
+
+1. 派 **一个** 修复 subagent 处理全部 findings——整体审查 findings 加账本遗留条目（不要每条 finding 一个 fixer）。记录 `FIX_BASE = git rev-parse HEAD`。
+2. 运行 `scripts/review-package PLAN_FILE FIX_BASE HEAD`，派发限定复审做评审2。
+3. 评审2 后仍未解决的条目逐条裁决写入账本，并在收尾汇报中原样呈现——此处没有下一阶段可承接。
 
 ## 收尾
 
@@ -185,9 +186,10 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 
 | 想法 | 现实 |
 |------|------|
-| "差不多符合 spec 了" | 审查发现 spec 缺口 = 没完成。修复或到 breaker 裁决。 |
+| "差不多符合 spec 了" | 审查发现 spec 缺口 = 没完成。进执行2；评审2 仍未过则写入账本并强制推进。 |
 | "我自己修更快" | controller 修复污染上下文且跳过审查。恢复实现者。 |
 | "修复很小，跳过复审" | 未审查的修复是回归的来源。修复后必须有限定复审。 |
+| "让 pi 子进程自己后台跑" | pi 里的 agent 干活时不用后台任务；命令已用 `--exclude-tools` 移除这些工具。 |
 | "这条 finding 明显是错的" | 裁决必须写入账本。禁止静默丢弃。 |
 | "账本维护是开销" | 账本是上下文压缩后幸存的唯一记录。没有账本的 controller 重派了整个已完成序列。 |
 
@@ -209,17 +211,23 @@ Task 2: 恢复模式
 Implementer: DONE, 8/8 tests passing
 [review-package → dispatch reviewer]
 Reviewer: Spec ❌ (缺进度报告), Important (magic number)
-[resume implementer with findings]
+[执行2: resume implementer with findings]
 Implementer: fixed, 10/10 passing
 [review-package FIX_BASE HEAD → dispatch re-reviewer]
-Re-reviewer: 2 addressed, 0 open, no new breakage
-[账本: Task 2: complete]
+评审2: 2 addressed, 0 open, no new breakage
+[账本: Task 2: complete (commits b1c2d3e..e4f5a6b, review clean)]
+
+Task 3: 并发写入
+[执行 → 评审: Important findings]
+[执行2 → 评审2: 1 条仍未解决]
+[账本: Task 3: complete (commits c2d3e4f..a7b8c9d, 1 carry-to-final) + Ruling: 强制推进 — ...]
 
 ...
 
 [所有任务完成]
-[review-package MERGE_BASE HEAD → dispatch final reviewer (账本配置)]
-Final reviewer: clean, deferred minors triaged — none block merge
+[review-package MERGE_BASE HEAD → dispatch final reviewer (账本配置, 含账本遗留条目)]
+Final reviewer: Sub-important findings + 1 carried item
+[执行2: 一个 fixer 处理全部 → 评审2: 全部解决]
 
 [删除 workspace，汇报裁决，让用户决定合并]
 ```
