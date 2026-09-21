@@ -1,0 +1,7 @@
+interface:
+  display_name: "Workspace Layout"
+  short_description: "扫描工作区、问清可疑目录后，按四层归属整理产物目录并重审 .gitignore"
+  default_prompt: "Use $workspace-layout to reorganize this workspace."
+
+policy:
+  allow_implicit_invocation: true
