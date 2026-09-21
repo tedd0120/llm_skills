@@ -12,7 +12,7 @@
 
 ## 文件与上下文
 
-所有派发产物保存在 `scripts/workspace PLAN_FILE` 返回的目录下。每次调用分配独立的 prompt、events、stderr 文件，例如 `task-1-implement.prompt.md`、`task-1-implement.events.jsonl`。文件统一使用 UTF-8。
+所有派发产物保存在 `scripts/workspace PLAN_FILE` 返回的目录下，包括 session 文件。每次调用分配独立的 prompt、events、stderr 文件，例如 `task-1-implement.prompt.md`、`task-1-implement.events.jsonl`。session 文件按阶段与角色命名为 `<阶段>-<角色>.session.jsonl`：`<阶段>` 为 `task-<N>` 或 `final`，`<角色>` 为 `implement`（实现与该任务的修复共用）、`review`、`rereview`、`fix`（仅最终阶段），例如 `task-1-implement.session.jsonl`、`task-1-rereview.session.jsonl`、`final-fix.session.jsonl`。文件统一使用 UTF-8。
 
 按角色模板生成 prompt 正文，填入 brief、报告、review package 的绝对路径。补充适用的仓库指引路径，让 Pi 开始前读取。实现与修复保留模板中的报告文件契约。
 

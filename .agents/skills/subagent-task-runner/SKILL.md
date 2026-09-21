@@ -80,7 +80,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 ## 准备
 
 1. 按开场确认的分支策略工作。
-2. 运行 `scripts/workspace PLAN_FILE` 获取本计划的工作目录 `data/subagent-task-runner/<plan-basename>/`（git-ignored），用于存放账本、brief、report、review package 和 Pi 调用产物。恢复旧计划时先将对应 `.task-runner/<plan-basename>/` 迁入该目录；两处均存在时先核对账本再决定恢复来源。
+2. 运行 `scripts/workspace PLAN_FILE` 获取本计划的工作目录（git-ignored），用于存放账本、brief、report、review package 和 Pi 调用产物。计划文件名为 `plan.md` 时（每个任务一个目录），工作目录为计划同级的 `runner/`；其他文件名使用 `<repo-root>/.task-runner/<plan-basename>/`。仓库指引另行规定计划与工作目录位置时，按仓库指引放置计划文件。
 3. 检查 `<workspace>/progress.md`：若首行指向本计划文件且有 `Task <N>: complete` 行，跳过已完成的任务；否则新建账本，首行 `# Ledger — plan: <plan file path>`。
 4. 读一遍计划，为每个任务建一条 todo。若计划引用了 spec，也读——spec 是权威，计划是论证。
 5. 开始前扫描任务间冲突：共享文件、接口矛盾、与全局约束的冲突。输出为表格写入账本。有冲突先裁决再动手。
@@ -180,7 +180,7 @@ if (-not $bashExe) { throw '找不到 Bash 运行时' }
 ## 收尾
 
 1. 收集账本中所有 `Ruling:` 行，在最终消息中列出"我做的裁决"，每条附判断错误的代价。这是用户看到你替他们做的决定的唯一途径。
-2. 删除本计划的工作目录（`rm -rf <workspace>`），git 历史即记录。不动其他计划的目录。
+2. 删除本计划的工作目录（`rm -rf <workspace>`），git 历史即记录。仓库指引要求保留账本或证据时，先按指引移出 `progress.md` 等文件再删除。不动其他计划的目录。
 3. 向用户汇报分支状态，让用户决定合并方式。
 
 ## 纪律

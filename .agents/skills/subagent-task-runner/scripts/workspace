@@ -4,7 +4,9 @@
 # cannot collide.
 #
 # Usage: workspace PLAN_FILE
-# Output: absolute path to <repo-root>/.task-runner/<plan-basename>/
+# Output: absolute path to the workspace:
+#   PLAN_FILE named plan.md (one task directory per plan) -> <plan-dir>/runner/
+#   any other name                                        -> <repo-root>/.task-runner/<plan-basename>/
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -16,12 +18,16 @@ plan=$1
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 
 slug=$(basename "$plan" .md)
-[ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \
-  || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
-
-root=$(git rev-parse --show-toplevel)
-base="$root/.task-runner"
-dir="$base/$slug"
+if [ "$slug" = "plan" ]; then
+  dir="$(cd "$(dirname "$plan")" && pwd)/runner"
+  ignore="$dir/.gitignore"
+else
+  [ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \
+    || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
+  root=$(git rev-parse --show-toplevel)
+  dir="$root/.task-runner/$slug"
+  ignore="$root/.task-runner/.gitignore"
+fi
 mkdir -p "$dir"
-printf '*\n' > "$base/.gitignore"
+printf '*\n' > "$ignore"
 cd "$dir" && pwd
