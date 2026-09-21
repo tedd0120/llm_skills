@@ -21,7 +21,25 @@ warnings.filterwarnings('ignore')
 load_dotenv(Path(__file__).parent.parent.parent.parent.parent / '.env')
 
 TEAMS_EM_CODE = os.getenv('TEAMS_EM_CODE')
+SKILL_NAME = 'teams-attendance'
 TEAMS_AUTHORIZATION = os.getenv('TEAMS_AUTHORIZATION')
+
+def _data_dir() -> Path:
+    """产出目录：LLM_SKILLS_DATA_DIR → 仓库根 data/ → ~/.llm-skills/data/，末级为本 skill 名。"""
+    base = os.getenv('LLM_SKILLS_DATA_DIR')
+    if base:
+        return Path(base) / SKILL_NAME
+    for parent in Path(__file__).resolve().parents:
+        if parent == Path.home():
+            break
+        if (parent / '.git').exists():
+            return parent / 'data' / SKILL_NAME
+    return Path.home() / '.llm-skills' / 'data' / SKILL_NAME
+
+
+def _default_output(check_month: str) -> str:
+    return str(_data_dir() / f"attendance_{check_month.replace('-', '')}.csv")
+
 
 def _check_env():
     """检查必需的环境变量是否已配置"""
@@ -190,7 +208,7 @@ def parsed_att_date(check_month: str, em_code: Optional[str] = None, authorizati
         check_month: 查询月份，格式 YYYY-MM
         em_code: 员工编码（可选，默认从环境变量读取）
         authorization: 授权令牌（可选，默认从环境变量读取）
-        output_path: CSV输出路径（可选，默认为 data/attendance_YYYYMM.csv）
+        output_path: CSV输出路径（可选，默认为 <产出目录>/attendance_YYYYMM.csv）
 
     Returns:
         [平均工时, 考勤明细DataFrame]
@@ -253,7 +271,7 @@ def parsed_att_date(check_month: str, em_code: Optional[str] = None, authorizati
     print_statistics(today, att_df, check_month)
 
     # 强制保存 CSV（默认路径或用户指定路径）
-    save_path = output_path or f"data/attendance_{check_month.replace('-', '')}.csv"
+    save_path = output_path or _default_output(check_month)
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     att_df.to_csv(save_path, index=False, encoding='utf-8-sig')
     print(f"考勤明细已保存至: {save_path}")
@@ -274,12 +292,12 @@ def main():
                         help='查询月份，格式 YYYY-MM，默认为当前月份')
     parser.add_argument('--output', '-o', type=str,
                         default=None,
-                        help='CSV输出路径，默认为 data/attendance_YYYYMM.csv')
+                        help='CSV输出路径，默认为 <产出目录>/attendance_YYYYMM.csv')
     args = parser.parse_args()
 
     # 默认路径跟随查询月份，而非当前月份
     if args.output is None:
-        args.output = f"data/attendance_{args.month.replace('-', '')}.csv"
+        args.output = _default_output(args.month)
 
     parsed_att_date(args.month, output_path=args.output)
 

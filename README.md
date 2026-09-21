@@ -37,6 +37,7 @@
 | **`litellm-model-speedtest`** | LiteLLM 网关全量模型列举与批量测速，输出连通性、首字延迟(TTFT)、token/秒排序报告 | 用户要求列出网关所有模型、测速、对比模型速度等 | `LLM_API_KEY`（仓库根 `.env`） |
 | **`agent-council`** | 将同一条 prompt 交给多个模型和主 Agent 独立完成，保存各自报告供后续比较 | 用户需要多模型会审、交叉验证、对比不同模型输出 | Pi CLI, Claude CLI |
 | **`subagent-task-runner`** | 按实现计划串行派发 subagent 执行任务，每任务后审查，全部完成后整体审查 | 接收结构化实现计划，需要高质量分步执行 | 无 |
+| **`workspace-layout`** | 扫描工作区、问清可疑目录后按四层归属整理产物目录并重审 .gitignore | 用户说“整理工作区”“目录太乱”“哪些该进 gitignore”等 | 无 |
 
 ### 方法论与质量
 
@@ -90,11 +91,15 @@ llm_skills/
 │       ├── teams-group-members/     # Teams 群架构树生成技能包
 │       ├── think-like-fable/        # 开发方法论技能包
 │       ├── website-uiux-extractor/  # 网站 UI/UX 视觉令牌提取技能包
+│       ├── workspace-layout/        # 工作区整理与 .gitignore 审查技能包
 │       ├── xiaohongshu-scraper/     # 小红书抓取入口技能包
 │       ├── xiaohongshu-fetch/       # 小红书数据抓取组件（内部）
 │       ├── xiaohongshu-formatter/   # 小红书报告格式化组件（内部）
 │       ├── xiaohongshu-summarize/   # 小红书报告生成组件（内部）
 │       └── yushu-sql/               # 毓数 SQL 查询技能包
-├── data/                            # 技能执行结果默认输出目录（已 gitignore）
+├── docs/agents/                     # 仓库级 agent 约定（开发产物规范等）
+├── data/                            # 技能运行产出，按 data/<skill>/ 分目录（已 gitignore）
+├── .local/                          # 技能登录态、token 缓存等本机状态（已 gitignore）
+├── .work/                           # 开发任务工作区 .work/<任务ID>/（已 gitignore）
 └── README.md                        # 本说明文档
 ```

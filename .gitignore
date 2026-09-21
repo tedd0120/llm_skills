@@ -1,72 +1,50 @@
-# Claude Code local config (skills is a junction to .agents/skills)
+# 开发产物：任务工作区与本机持久状态（见 docs/agents/artifacts.md）
+.work/
+.local/
+
+# skill 运行产出与用户输入（仅仓库根）
+/data/
+/input/
+
+# 第三方 skill 固定输出目录
+.agent-council/
+.impeccable/
+/PRODUCT.md
+
+# 旧布局（防御性忽略）
+.prototype/
+.task-runner/
+
+# AI 客户端本机状态（.claude 中 skills 为指向 .agents/skills 的 junction）
 .claude/
-
-# ZCode local config (contains plaintext secrets like TAVILY_API_KEY)
 .zcode/
-
-# Pi
 .pi/
+.antigravitycli/
 
-# Environment variables
+# 机密与本机配置
 .env
+.env.*
+!.env.example
 settings.local.json
+xhs_auth.json
+.token_cache.json
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
+.pytest_cache/
+/.venv/
+/venv/
+/ENV/
+/env/
 
-# Virtual environments
-venv/
-ENV/
-env/
-
-# IDE
+# 编辑器与操作系统
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.antigravitycli/
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Data
-data/
-.prototype/
-.agent-council/
-input/
-.impeccable/
-PRODUCT.md
-
-# Xiaohongshu auth state
-xhs_auth.json
-
-# Ctrip auth state (huazhu-crowd-index)
-ctrip_auth.json
-ctrip_debug_*.png
-ctrip_login.png
-_cal_*.png
-
-# pan123-renamer
-.token_cache.json
-.agents/skills/pan123-renamer/scripts/output/

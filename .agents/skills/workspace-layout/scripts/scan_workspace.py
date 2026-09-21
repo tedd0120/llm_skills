@@ -116,7 +116,7 @@ def process_refs() -> list[tuple[int, list[str]]] | None:
         return None
     found = []
     for item in proc.iterdir():
-        if not item.name.isdigit():
+        if not item.name.isdigit() or int(item.name) in (os.getpid(), os.getppid()):
             continue
         try:
             if item.stat().st_uid != os.getuid():

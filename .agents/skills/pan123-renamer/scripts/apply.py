@@ -2,8 +2,8 @@
 """执行重命名方案：建目录 → 移动 → 改名，逐条写回滚日志。
 
 用法:
-    python apply.py output/rename_plan.json --dry-run   # 只打印将执行的操作
-    python apply.py output/rename_plan.json             # 实际执行（支持断点续跑）
+    python apply.py <产出目录>/rename_plan.json --dry-run   # 只打印将执行的操作
+    python apply.py <产出目录>/rename_plan.json             # 实际执行（支持断点续跑）
 
 方案 JSON 格式:
 {
@@ -20,7 +20,7 @@
 默认在全部条目处理完后，对 oldDirs 逐个检查：若已清空则移入回收站（可用
 recover 接口找回），非空则跳过不动。加 --keep-old-dirs 可关闭此行为。
 
-回滚日志为 JSONL（output/rollback_log.jsonl），每完成一步追加一行。
+回滚日志为 JSONL（<产出目录>/rollback_log.jsonl），每完成一步追加一行。
 """
 import argparse
 import json
@@ -29,7 +29,7 @@ import sys
 import time
 from pathlib import Path
 
-from pan123_client import Pan123Client
+from pan123_client import Pan123Client, data_dir, load_env
 
 ILLEGAL = re.compile(r'["*:<>?/\\|]')
 
@@ -43,14 +43,15 @@ def main():
     ap.add_argument("plan", help="rename_plan.json 路径")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--keep-old-dirs", action="store_true", help="不清理 oldDirs 中已清空的旧目录")
-    ap.add_argument("--log", default=str(Path(__file__).parent / "output" / "rollback_log.jsonl"))
+    ap.add_argument("--log", default=None, help="默认 <产出目录>/rollback_log.jsonl")
     args = ap.parse_args()
 
     plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
     root_id = plan.get("rootId", 0)
     entries = plan["entries"]
 
-    log_path = Path(args.log)
+    load_env()
+    log_path = Path(args.log) if args.log else data_dir() / "rollback_log.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     done = set()
     if log_path.is_file():

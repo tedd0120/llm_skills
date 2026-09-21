@@ -21,7 +21,7 @@ description: 列出 LiteLLM 网关（或任意 Anthropic Messages 兼容端点�
 
 ### 1. 运行测速脚本
 
-通过本技能脚本执行测速（产物默认写入仓库根目录 `data/litellm-model-speedtest/`）：
+通过本技能脚本执行测速（产物默认写入仓库根目录 `data/litellm-model-speedtest/`；`LLM_REPORT_DIR` 可指定本 skill 报告目录，`LLM_SKILLS_DATA_DIR` 指定所有 skill 的产出根目录，找不到仓库根时写到 `~/.llm-skills/data/litellm-model-speedtest/`）：
 
 ```bash
 # 全量测速（默认并发 8，每模型 max_tokens 512）

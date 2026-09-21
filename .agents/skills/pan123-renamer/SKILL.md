@@ -28,24 +28,24 @@ PAN123_CLIENT_SECRET=你的clientSecret
 
 ## 工作流程
 
-脚本目录：`.agents/skills/pan123-renamer/scripts/`（输出默认存放在 `output/`）。
+脚本目录：`.agents/skills/pan123-renamer/scripts/`。产出目录为仓库根 `data/pan123-renamer/`（设置 `LLM_SKILLS_DATA_DIR` 时为 `$LLM_SKILLS_DATA_DIR/pan123-renamer/`，找不到仓库根时为 `~/.llm-skills/data/pan123-renamer/`），下文记作 `<产出目录>`；access_token 缓存在 `.local/pan123-renamer/`。
 
 1. **自测连接**：
    运行 `python pan123_client.py` 验证凭证连通性，打印用户信息与根目录状态。
 2. **扫描文件树**：
-   运行 `python scan.py`（全盘）或 `python scan.py --parent <fileId>`（子目录测试）生成 `output/pan123_tree.json`。
+   运行 `python scan.py`（全盘）或 `python scan.py --parent <fileId>`（子目录测试）生成 `<产出目录>/pan123_tree.json`。
 3. **推断规范命名**：
    读取 tree JSON。凡涉及作品名、年份、季号、集号等事实字段，**必须阅读 [references/media-verification.md](references/media-verification.md) 通过网络核验，严禁凭直觉推断**。
 4. **生成方案并确认**：
-   输出计划文件 `output/rename_plan.json`（包含 `rootId`、`entries` 与清空目录清单 `oldDirs`），向用户呈现分组对照表，低置信度条目主动向用户确认。
+   输出计划文件 `<产出目录>/rename_plan.json`（包含 `rootId`、`entries` 与清空目录清单 `oldDirs`），向用户呈现分组对照表，低置信度条目主动向用户确认。
 5. **执行改名**：
    先运行带 `--dry-run` 参数的演练命令供用户确认：
    ```bash
-   python apply.py output/rename_plan.json --dry-run
+   python apply.py <产出目录>/rename_plan.json --dry-run
    ```
    用户认可后去掉 `--dry-run` 实际执行。
 6. **回滚操作**（用户要求时）：
-   运行 `python rollback.py output/rollback_log.jsonl` 一键还原。
+   运行 `python rollback.py <产出目录>/rollback_log.jsonl` 一键还原。
 
 ---
 

@@ -33,10 +33,23 @@ if sys.platform == "win32":
 # 加载环境变量
 load_dotenv()
 
-FETCH_SCRIPT_DIR = Path(__file__).parent.resolve()
-AUTH_STATE_PATH = (
-    FETCH_SCRIPT_DIR.parent.parent / "xiaohongshu-scraper" / "scripts" / "xhs_auth.json"
-).resolve()
+STATE_NAME = "xiaohongshu"
+
+
+def _state_dir() -> Path:
+    """本机状态目录：LLM_SKILLS_STATE_DIR → 仓库根 .local/ → ~/.llm-skills/local/，末级 xiaohongshu 由 scraper 与 fetch 共用。"""
+    base = os.getenv("LLM_SKILLS_STATE_DIR")
+    if base:
+        return Path(base) / STATE_NAME
+    for parent in Path(__file__).resolve().parents:
+        if parent == Path.home():
+            break
+        if (parent / ".git").exists():
+            return parent / ".local" / STATE_NAME
+    return Path.home() / ".llm-skills" / "local" / STATE_NAME
+
+
+AUTH_STATE_PATH = _state_dir() / "xhs_auth.json"
 
 
 def build_cookie_fingerprint(path: Path) -> dict:
@@ -282,7 +295,8 @@ class XHSScraper:
         2. 截图保存
         3. 返回截图路径供用户扫码
         """
-        captcha_screenshot = FETCH_SCRIPT_DIR / "xhs_captcha_qr.png"
+        captcha_screenshot = _state_dir() / "xhs_captcha_qr.png"
+        captcha_screenshot.parent.mkdir(parents=True, exist_ok=True)
 
         try:
             # 等待二维码图片加载完成（最长等待 10 秒）

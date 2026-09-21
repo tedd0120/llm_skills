@@ -96,9 +96,21 @@ DEFAULT_PROXY = os.environ.get("LLM_PROXY") or os.environ.get(
     "LLM_HTTP_PROXY", "http://127.0.0.1:7897")
 
 
-# 报告默认输出到仓库根目录 data/litellm-model-speedtest/（与 cwd 无关）
-DEFAULT_REPORT_DIR = os.environ.get(
-    "LLM_REPORT_DIR", str(_repo_root() / "data" / "litellm-model-speedtest"))
+def _data_dir():
+    """产出目录：LLM_SKILLS_DATA_DIR → 仓库根 data/ → ~/.llm-skills/data/，末级为本 skill 名（与 cwd 无关）。"""
+    base = os.environ.get("LLM_SKILLS_DATA_DIR")
+    if base:
+        return Path(base) / "litellm-model-speedtest"
+    for parent in Path(__file__).resolve().parents:
+        if parent == Path.home():
+            break
+        if (parent / ".git").exists():
+            return parent / "data" / "litellm-model-speedtest"
+    return Path.home() / ".llm-skills" / "data" / "litellm-model-speedtest"
+
+
+# LLM_REPORT_DIR 可单独指定本 skill 的报告目录
+DEFAULT_REPORT_DIR = os.environ.get("LLM_REPORT_DIR", str(_data_dir()))
 
 # 远程服务器部署配置（支持 SCP 推送）
 DEFAULT_DEPLOY_TARGET = os.environ.get("SPEEDTEST_DEPLOY_TARGET", "")

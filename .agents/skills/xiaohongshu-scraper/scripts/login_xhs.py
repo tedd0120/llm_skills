@@ -23,9 +23,24 @@ if sys.platform == "win32":
 
 load_dotenv()
 
-SCRAPER_SCRIPT_DIR = Path(__file__).parent.resolve()
-AUTH_STATE_PATH = (SCRAPER_SCRIPT_DIR / "xhs_auth.json").resolve()
-QR_IMAGE_PATH = (SCRAPER_SCRIPT_DIR / "xhs_qr_login.png").resolve()
+STATE_NAME = "xiaohongshu"
+
+
+def _state_dir() -> Path:
+    """本机状态目录：LLM_SKILLS_STATE_DIR → 仓库根 .local/ → ~/.llm-skills/local/，末级 xiaohongshu 由 scraper 与 fetch 共用。"""
+    base = os.getenv("LLM_SKILLS_STATE_DIR")
+    if base:
+        return Path(base) / STATE_NAME
+    for parent in Path(__file__).resolve().parents:
+        if parent == Path.home():
+            break
+        if (parent / ".git").exists():
+            return parent / ".local" / STATE_NAME
+    return Path.home() / ".llm-skills" / "local" / STATE_NAME
+
+
+AUTH_STATE_PATH = _state_dir() / "xhs_auth.json"
+QR_IMAGE_PATH = _state_dir() / "xhs_qr_login.png"
 
 
 def build_cookie_fingerprint(path: Path) -> dict:

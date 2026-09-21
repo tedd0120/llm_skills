@@ -46,7 +46,7 @@ def active_users(path: Path) -> list[int] | None:
         return None
     found = set()
     for item in proc.iterdir():
-        if not item.name.isdigit():
+        if not item.name.isdigit() or int(item.name) in (os.getpid(), os.getppid()):
             continue
         try:
             if item.stat().st_uid != os.getuid():

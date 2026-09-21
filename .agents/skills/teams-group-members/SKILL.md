@@ -33,15 +33,16 @@ TEAMS_GROUP_CODES=群组A,群组B,群组C
 # 1) 查询指定单群并落盘
 python .agents/skills/teams-group-members/scripts/fetch_group_members.py \
   --group FhSnheH3T_grT5yzxqVS5o \
-  --output data/single_group_members.json
+  --output single_group_members.json
 
 # 2) 按 .env 中 TEAMS_GROUP_CODES 批量抓取多群并集去重
 python .agents/skills/teams-group-members/scripts/fetch_group_members.py \
-  --output data/all_groups_members.json
+  --output all_groups_members.json
 ```
 
 **产物说明**：
-- 传入 `--output data/xxx.json` 时，同步生成 `data/xxx_org_tree.html`；
-- 未指定 `--output` 时，默认输出 `data/latest_group_members_org_tree.html`。
+- 产出目录为仓库根 `data/teams-group-members/`；设置 `LLM_SKILLS_DATA_DIR` 时为 `$LLM_SKILLS_DATA_DIR/teams-group-members/`，找不到仓库根时为 `~/.llm-skills/data/teams-group-members/`。
+- `--output` 只给文件名（如 `xxx.json`）时写入产出目录，带目录时按给定路径写入；同时在 JSON 旁生成 `xxx_org_tree.html`。
+- 未指定 `--output` 时，只在产出目录输出 `latest_group_members_org_tree.html`。
 
 *注：Python SDK 函数签名、返回值字段与 HTML 交互详情见 [references/api-reference.md](references/api-reference.md)。*

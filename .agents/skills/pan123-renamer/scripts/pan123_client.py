@@ -3,7 +3,7 @@
 
 鉴权、按接口 QPS 节流、429/401 自动重试。
 凭证从项目根目录 .env 读取：PAN123_CLIENT_ID / PAN123_CLIENT_SECRET
-access_token 缓存到本目录 .token_cache.json（已 gitignore）。
+access_token 缓存到本机状态目录的 .token_cache.json（见 state_dir）。
 
 直接运行做自测：python pan123_client.py  → 打印用户信息 + 根目录列表
 """
@@ -22,7 +22,30 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 API_BASE = "https://open-api.123pan.com"
 SCRIPT_DIR = Path(__file__).resolve().parent
-TOKEN_CACHE = SCRIPT_DIR / ".token_cache.json"
+SKILL_NAME = "pan123-renamer"
+
+
+def _skill_home(env_name: str, repo_dir: str, home_dir: str) -> Path:
+    base = os.getenv(env_name)
+    if base:
+        return Path(base) / SKILL_NAME
+    for parent in SCRIPT_DIR.parents:
+        if parent == Path.home():
+            break
+        if (parent / ".git").exists():
+            return parent / repo_dir / SKILL_NAME
+    return Path.home() / ".llm-skills" / home_dir / SKILL_NAME
+
+
+def data_dir() -> Path:
+    """产出目录：LLM_SKILLS_DATA_DIR → 仓库根 data/ → ~/.llm-skills/data/，末级为本 skill 名。"""
+    return _skill_home("LLM_SKILLS_DATA_DIR", "data", "data")
+
+
+def state_dir() -> Path:
+    """本机状态目录：LLM_SKILLS_STATE_DIR → 仓库根 .local/ → ~/.llm-skills/local/，末级为本 skill 名。"""
+    return _skill_home("LLM_SKILLS_STATE_DIR", ".local", "local")
+
 
 # 各接口 QPS 上限（参考开放平台文档）→ 换算为最小请求间隔（秒）
 QPS = {
@@ -54,6 +77,7 @@ def load_env():
 class Pan123Client:
     def __init__(self):
         load_env()
+        self.token_cache = state_dir() / ".token_cache.json"
         self.client_id = os.environ.get("PAN123_CLIENT_ID", "")
         self.client_secret = os.environ.get("PAN123_CLIENT_SECRET", "")
         if not self.client_id or not self.client_secret:
@@ -67,9 +91,9 @@ class Pan123Client:
         if not force:
             if self._token:
                 return self._token
-            if TOKEN_CACHE.is_file():
+            if self.token_cache.is_file():
                 try:
-                    cache = json.loads(TOKEN_CACHE.read_text(encoding="utf-8"))
+                    cache = json.loads(self.token_cache.read_text(encoding="utf-8"))
                     if cache.get("expireTs", 0) > time.time() + 3600:
                         self._token = cache["accessToken"]
                         return self._token
@@ -86,7 +110,8 @@ class Pan123Client:
             sys.exit(f"获取 access_token 失败: {data.get('message')}")
         self._token = data["data"]["accessToken"]
         # expiredAt 形如 2026-08-01T12:00:00+08:00，保守按 25 天缓存
-        TOKEN_CACHE.write_text(
+        self.token_cache.parent.mkdir(parents=True, exist_ok=True)
+        self.token_cache.write_text(
             json.dumps({"accessToken": self._token, "expireTs": time.time() + 25 * 86400}),
             encoding="utf-8",
         )

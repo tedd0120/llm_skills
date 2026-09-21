@@ -20,7 +20,7 @@ TEAMS_AUTHORIZATION=你的授权令牌
 
 1. **考勤数据获取**：调用 API 获取指定月份考勤打卡明细。
 2. **工时统计与预测**：自动计算累计工时、日均工时，并预测剩余工作日达标所需工时。
-3. **CSV 导出**：自动保存考勤明细（默认落盘至 `data/attendance_YYYYMM.csv`）。
+3. **CSV 导出**：自动保存考勤明细（默认落盘至仓库根 `data/teams-attendance/attendance_YYYYMM.csv`；设置 `LLM_SKILLS_DATA_DIR` 时改写到 `$LLM_SKILLS_DATA_DIR/teams-attendance/`，找不到仓库根时写到 `~/.llm-skills/data/teams-attendance/`）。
 
 ---
 
@@ -34,7 +34,7 @@ python .agents/skills/teams-attendance/scripts/fetch_attendance.py
 python .agents/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01
 
 # 导出 CSV 到指定路径
-python .agents/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01 --output ./data/attendance_202601.csv
+python .agents/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-01 --output <目录>/attendance_202601.csv
 ```
 
 ### 参数说明
@@ -42,7 +42,7 @@ python .agents/skills/teams-attendance/scripts/fetch_attendance.py --month 2026-
 | 参数 | 类型 | 说明 |
 |:---|:---|:---|
 | `--month` | str | 查询月份，格式 `YYYY-MM`；不传则默认查询当前自然月 |
-| `--output` | str | CSV 输出路径，默认 `data/attendance_YYYYMM.csv` |
+| `--output` | str | CSV 输出路径，默认 `data/teams-attendance/attendance_YYYYMM.csv` |
 
 ---
 

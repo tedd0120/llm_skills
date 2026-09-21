@@ -4,7 +4,7 @@
 用法:
     python scan.py                     # 全盘扫描
     python scan.py --parent 12345     # 只扫描指定目录（试跑用）
-    python scan.py --out output/pan123_tree.json
+    python scan.py --out <路径>/pan123_tree.json
 
 输出 JSON 结构:
 {
@@ -20,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from pan123_client import Pan123Client
+from pan123_client import Pan123Client, data_dir
 
 VIDEO_EXT = {"mkv", "mp4", "ts", "m2ts", "avi", "iso", "rmvb", "rm", "wmv",
              "flv", "mov", "mpg", "mpeg", "webm", "vob", "m4v", "3gp", "strm"}
@@ -34,7 +34,7 @@ def ext_of(name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--parent", type=int, default=0, help="起始目录 fileId，默认 0=根目录")
-    ap.add_argument("--out", default=str(Path(__file__).parent / "output" / "pan123_tree.json"))
+    ap.add_argument("--out", default=None, help="默认 <产出目录>/pan123_tree.json")
     args = ap.parse_args()
 
     c = Pan123Client()
@@ -66,7 +66,7 @@ def main():
                                       "size": f.get("size", 0), "isVideo": e in VIDEO_EXT})
         files.extend(dir_files)
 
-    out = Path(args.out)
+    out = Path(args.out) if args.out else data_dir() / "pan123_tree.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({
         "scannedAt": time.strftime("%Y-%m-%d %H:%M:%S"),

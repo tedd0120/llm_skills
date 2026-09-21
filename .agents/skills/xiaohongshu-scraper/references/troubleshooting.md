@@ -7,11 +7,11 @@
 `login_xhs.py` 与 `fetch_xhs.py` 固定使用同一份 Cookie 文件：
 
 ```text
-.agents/skills/xiaohongshu-scraper/scripts/xhs_auth.json
+<仓库根>/.local/xiaohongshu/xhs_auth.json
 ```
 
-- 路径由脚本根据自身位置推导，不依赖执行命令时的当前工作目录。
-- 二维码截图输出到 `scripts/xhs_qr_login.png`。
+- 状态目录依次取 `LLM_SKILLS_STATE_DIR/xiaohongshu/`、脚本所在仓库根的 `.local/xiaohongshu/`、`~/.llm-skills/local/xiaohongshu/`，不依赖执行命令时的当前工作目录。
+- 二维码截图输出到同一状态目录的 `xhs_qr_login.png`。
 
 ## 依赖安装
 

@@ -146,8 +146,16 @@ class ArtifactsTests(unittest.TestCase):
             self.assertIsNone(artifacts.TASK_ID.fullmatch(bad))
 
     @unittest.skipUnless(Path("/proc").is_dir(), "需要 /proc")
-    def test_live_process_cwd(self) -> None:
-        self.assertIn(os.getpid(), artifacts.active_users(Path.cwd().resolve()))
+    def test_live_process_cwd_excludes_self(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            child = subprocess.Popen(["sleep", "30"], cwd=tmp)
+            try:
+                pids = artifacts.active_users(Path(tmp).resolve())
+            finally:
+                child.kill()
+                child.wait()
+            self.assertIn(child.pid, pids)
+            self.assertNotIn(os.getpid(), pids)
 
 
 if __name__ == "__main__":

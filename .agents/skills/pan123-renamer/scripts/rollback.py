@@ -2,7 +2,7 @@
 """按回滚日志逆向恢复重命名/移动操作。
 
 用法:
-    python rollback.py output/rollback_log.jsonl [--dry-run]
+    python rollback.py <产出目录>/rollback_log.jsonl [--dry-run]
 
 - rename → 改回原名
 - move   → 移回原目录（需日志中有 fromParentId，方案条目里带 oldParentId 才会记录）

@@ -25,7 +25,21 @@ load_dotenv(Path(__file__).parent.parent.parent.parent.parent / '.env')
 
 TEAMS_AUTHORIZATION = os.getenv('TEAMS_AUTHORIZATION')
 TEAMS_GROUP_CODES = os.getenv('TEAMS_GROUP_CODES', '')
-DEFAULT_LATEST_HTML_PATH = 'data/latest_group_members_org_tree.html'
+SKILL_NAME = 'teams-group-members'
+LATEST_HTML_NAME = 'latest_group_members_org_tree.html'
+
+
+def _data_dir() -> Path:
+    """产出目录：LLM_SKILLS_DATA_DIR → 仓库根 data/ → ~/.llm-skills/data/，末级为本 skill 名。"""
+    base = os.getenv('LLM_SKILLS_DATA_DIR')
+    if base:
+        return Path(base) / SKILL_NAME
+    for parent in Path(__file__).resolve().parents:
+        if parent == Path.home():
+            break
+        if (parent / '.git').exists():
+            return parent / 'data' / SKILL_NAME
+    return Path.home() / '.llm-skills' / 'data' / SKILL_NAME
 
 
 def _check_env(authorization: Optional[str] = None):
@@ -195,7 +209,7 @@ def _resolve_html_path(save_path: Optional[str] = None) -> str:
     计算组织树 HTML 输出路径
     """
     if not save_path:
-        return DEFAULT_LATEST_HTML_PATH
+        return (_data_dir() / LATEST_HTML_NAME).as_posix()
 
     json_path = Path(save_path)
     stem = json_path.stem if json_path.suffix else json_path.name
@@ -366,8 +380,10 @@ def main():
     parser.add_argument('--group', '-g', type=str,
                         help='单个群组代码，如 FhSnheH3T_grT5yzxqVS5o')
     parser.add_argument('--output', '-o', type=str,
-                        help='输出文件路径（JSON），如 data/members.json')
+                        help='输出 JSON 路径；只给文件名时写入本 skill 的产出目录')
     args = parser.parse_args()
+    if args.output and Path(args.output).name == args.output:
+        args.output = str(_data_dir() / args.output)
 
     if args.group:
         fetch_group_members(args.group, save_path=args.output)
