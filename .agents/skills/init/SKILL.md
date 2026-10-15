@@ -1,6 +1,6 @@
 ---
 name: init
-description: 新建项目时一键初始化 AGENTS.md 与 CLAUDE.md，或对存量项目进行查漏补缺。配置语言规范、Git安全红线、阶段规划与实时状态跟踪、.work/ 任务工作区与产物目录、测试剃刀原则、代码检索及 Skill 渐进式披露指引。
+description: 新建项目时一键初始化 AGENTS.md 与 CLAUDE.md，或对存量项目进行查漏补缺。配置语言规范、Git安全红线、阶段规划与实时状态跟踪、方案确认后执行、.work/ 任务工作区与产物目录、测试剃刀原则、代码检索及 Skill 渐进式披露指引。
 ---
 
 # 项目初始化与规范对齐（init）
@@ -14,7 +14,7 @@ description: 新建项目时一键初始化 AGENTS.md 与 CLAUDE.md，或对存�
 - **双文件单真源**：`CLAUDE.md` 引用 `@AGENTS.md`，所有规则收口在 `AGENTS.md`。
 - **模板单真源**：标准正本存放在 `templates/`：
   - `templates/CLAUDE.md`：单真源入口声明。
-  - `templates/AGENTS.md`：包含 7 项通用规则（语言、Git 安全红线、`.work/<任务ID>/plan.md` 阶段与状态跟踪、`.work/` 任务工作区与 `.local/` 本机状态、测试剃刀原则、代码检索、Skill 渐进式披露与文件级隔离）。
+  - `templates/AGENTS.md`：包含 7 项通用规则（语言、Git 安全红线、`.work/<任务ID>/plan.md` 阶段与状态跟踪及方案确认、`.work/` 任务工作区与 `.local/` 本机状态、测试剃刀原则、代码检索、Skill 渐进式披露与文件级隔离）。
 
 ## 执行方式
 
