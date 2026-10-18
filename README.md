@@ -38,6 +38,7 @@
 | **`agent-council`** | 将同一条 prompt 交给多个模型和主 Agent 独立完成，保存各自报告供后续比较 | 用户需要多模型会审、交叉验证、对比不同模型输出 | Pi CLI, Claude CLI |
 | **`subagent-task-runner`** | 按实现计划串行派发 subagent 执行任务，每任务后审查，全部完成后整体审查 | 接收结构化实现计划，需要高质量分步执行 | 无 |
 | **`workspace-layout`** | 扫描工作区、问清可疑目录后按四层归属整理产物目录并重审 .gitignore | 用户说“整理工作区”“目录太乱”“哪些该进 gitignore”等 | 无 |
+| **`storage-analyzer`** | Windows 磁盘分析，生成可勾选清理的本机网页：缓存移入回收站或直接删除，回收站、休眠文件、更新残留一键处理，附空间下钻与迁移建议 | C 盘满了、清理磁盘、查找占用、清理后刷新报告 | Python 3.10+；清理服务使用 pywin32、Send2Trash |
 
 ### 方法论与质量
 

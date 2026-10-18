@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>磁盘空间清理</title>
+<style>
+:root{
+  --bg:#f3f4f1;--surface:#fff;--surface-2:#f7f8f5;--line:#e2e5de;--line-2:#cfd4cb;
+  --ink:#18201c;--ink-2:#47524c;--ink-3:#77827c;
+  --accent:#1c7451;--accent-hover:#155c40;--accent-ink:#fff;--accent-soft:#e1f1e8;
+  --amber:#a86a12;--amber-bar:#e3a33b;--amber-soft:#faf0db;
+  --violet:#5b4bc4;--violet-bar:#8577e0;--violet-soft:#ecebfb;
+  --danger:#b93a26;--danger-soft:#fbe6e1;
+  --used:#c6ccc3;--track:#e9ece6;
+  --shadow:0 1px 2px rgba(18,28,22,.05),0 6px 20px rgba(18,28,22,.05);
+  --radius:14px;--mono:"Cascadia Mono",Consolas,ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#111513;--surface:#191e1b;--surface-2:#1f2521;--line:#2a312d;--line-2:#39423c;
+  --ink:#e6ebe8;--ink-2:#b2bcb6;--ink-3:#838e88;
+  --accent:#3bb07b;--accent-hover:#4cc58d;--accent-ink:#06150e;--accent-soft:#183427;
+  --amber:#e2ab52;--amber-bar:#d39a3e;--amber-soft:#35291a;
+  --violet:#a497f2;--violet-bar:#8a7de6;--violet-soft:#27233f;
+  --danger:#f08a76;--danger-soft:#3a1f1a;
+  --used:#3b443e;--track:#242b27;--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);color-scheme:dark}}
+*{box-sizing:border-box}
+html{font-size:15px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+main{max-width:1180px;margin:0 auto;padding:28px 24px 140px}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+button{font:inherit;color:inherit}
+a{color:var(--accent)}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12px;color:var(--ink-3);word-break:break-all}
+.muted{color:var(--ink-3)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:9px;padding:7px 14px;cursor:pointer;font-size:14px;white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{background:var(--surface-2);border-color:var(--ink-3)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover:not(:disabled){background:var(--accent-hover)}
+.btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line))}
+.btn.danger:hover:not(:disabled){background:var(--danger-soft)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2);padding:6px 10px}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.sm{font-size:13px;padding:4px 10px;border-radius:8px}
+.btn svg{width:15px;height:15px;flex:none}
+.shield{font-size:11px;color:var(--ink-3);font-weight:500}
+
+/* header */
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}
+.top h1{font-size:24px}
+.top .meta{font-size:13px;color:var(--ink-3);margin-top:2px}
+.conn{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}
+.conn i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.conn.on i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.conn.off i{background:var(--amber-bar)}
+
+/* hero */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.hero{padding:24px 26px}
+.hero-nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.hero-nums .k{font-size:13px;color:var(--ink-3)}
+.hero-nums .v{font-size:34px;font-weight:650;letter-spacing:-.02em;line-height:1.2;margin-top:2px}
+.hero-nums .v small{font-size:15px;font-weight:500;color:var(--ink-3);letter-spacing:0;margin-left:4px}
+.hero-nums .s{font-size:13px;color:var(--ink-2);margin-top:2px}
+.delta{display:inline-block;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 9px;margin-left:6px;vertical-align:4px}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--track);margin:22px 0 12px}
+.bar i{display:block;height:100%;transition:width .5s ease}
+.bar i+i{box-shadow:inset 2px 0 0 var(--surface)}
+.seg-safe{background:var(--accent)}.seg-review{background:var(--amber-bar)}.seg-sys{background:var(--violet-bar)}.seg-used{background:var(--used)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend b{font-weight:600;color:var(--ink)}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.legend .free{background:var(--track);box-shadow:inset 0 0 0 1px var(--line-2)}
+
+/* quick actions */
+.section-title{display:flex;align-items:baseline;gap:10px;margin:30px 0 12px}
+.section-title h2{font-size:17px}
+.section-title p{margin:0;font-size:13px;color:var(--ink-3)}
+.quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.qa{padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.qa .rank{font-size:12px;color:var(--ink-3);font-weight:600}
+.qa h3{font-size:15px}
+.qa .size{font-size:24px;font-weight:650;letter-spacing:-.01em}
+.qa .c-safe{color:var(--accent)}.qa .c-sys{color:var(--violet)}.qa .c-review{color:var(--amber)}
+.qa p{margin:0;font-size:13px;color:var(--ink-2);flex:1}
+.qa .btn{align-self:flex-start;margin-top:6px}
+
+/* tabs */
+.tabs{position:sticky;top:0;z-index:5;display:flex;gap:4px;margin:30px -24px 18px;padding:10px 24px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:0;background:transparent;padding:7px 14px;border-radius:9px;cursor:pointer;color:var(--ink-2);font-size:14px;white-space:nowrap}
+.tab:hover{background:var(--surface)}
+.tab[aria-selected=true]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.tab .count{font-size:12px;color:var(--ink-3);margin-left:4px;font-weight:500}
+[hidden]{display:none!important}
+
+/* toolbar */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.search{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;padding:0 12px}
+.search input{flex:1;border:0;background:transparent;padding:9px 0;font:inherit;color:var(--ink);outline:none}
+.search svg{width:16px;height:16px;color:var(--ink-3)}
+.chips{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px}
+.chip{border:0;background:transparent;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--ink-2)}
+.chip[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+/* categories and groups */
+.cat{margin-bottom:12px;overflow:hidden}
+.cat-head{display:grid;grid-template-columns:auto 1fr auto auto;gap:14px;align-items:center;padding:14px 18px;cursor:pointer}
+.cat-head:hover{background:var(--surface-2)}
+.cat-head h3{font-size:15px}
+.cat-head p{margin:1px 0 0;font-size:13px;color:var(--ink-3)}
+.cat-size{font-size:17px;font-weight:650;text-align:right}
+.cat-size small{display:block;font-size:12px;color:var(--ink-3);font-weight:500}
+.chev{width:16px;height:16px;color:var(--ink-3);transition:transform .2s}
+.open>.cat-head .chev,.open>.row-head .chev{transform:rotate(90deg)}
+.cat-body{border-top:1px solid var(--line)}
+.row{border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:11px 18px 11px 18px;cursor:pointer}
+.row-head:hover{background:var(--surface-2)}
+.row-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:550}
+.row-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-size{text-align:right;font-weight:600;font-size:14px;min-width:78px}
+.row-size small{display:block;font-weight:400;font-size:12px;color:var(--ink-3)}
+.badge{font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.badge.review{background:var(--amber-soft);color:var(--amber)}
+.badge.done{background:var(--accent-soft);color:var(--accent)}
+.badge.off{background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line)}
+.row.cleaned .row-title span.t{text-decoration:line-through;color:var(--ink-3)}
+.row-body{padding:2px 18px 16px 52px;font-size:14px;color:var(--ink-2)}
+.row-body p{margin:6px 0}
+.row-body b{color:var(--ink);font-weight:600}
+.parts{display:grid;grid-template-columns:minmax(0,1fr) 110px 70px;gap:4px 12px;align-items:center;margin:10px 0;font-size:12.5px}
+.parts .mono{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{height:6px;border-radius:3px;background:var(--track);overflow:hidden}
+.mini i{display:block;height:100%;background:var(--ink-3);opacity:.55}
+.samples{width:100%;border-collapse:collapse;margin-top:8px;font-size:12.5px;table-layout:fixed}
+.samples td{padding:5px 0;border-top:1px solid var(--line);vertical-align:top}
+.samples td:last-child{width:120px;text-align:right;color:var(--ink-3)}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+details.more summary{cursor:pointer;color:var(--ink-2);font-size:13px;margin-top:8px}
+
+/* checkbox */
+.ck{appearance:none;width:18px;height:18px;border:1.5px solid var(--line-2);border-radius:5px;background:var(--surface);cursor:pointer;display:grid;place-content:center;margin:0;flex:none}
+.ck:checked,.ck:indeterminate{background:var(--accent);border-color:var(--accent)}
+.ck:checked::after{content:"";width:9px;height:5px;border:2px solid var(--accent-ink);border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.ck:indeterminate::after{content:"";width:9px;height:2px;background:var(--accent-ink);border-radius:1px}
+.ck:disabled{opacity:.4;cursor:not-allowed}
+
+/* system cards */
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start}
+.sys{padding:18px 20px;display:flex;flex-direction:column;gap:8px}
+.sys-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.sys-head h3{font-size:15px}
+.sys-size{font-size:20px;font-weight:650;white-space:nowrap}
+.sys p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.sys .impact{background:var(--surface-2);border-radius:9px;padding:9px 12px;font-size:13px}
+.sys .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.cmd{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 10px}
+.cmd code{flex:1;font-family:var(--mono);font-size:12px;overflow-x:auto;white-space:nowrap}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;font-size:12.5px}
+.kv span:nth-child(even){text-align:right;color:var(--ink-2)}
+
+/* explorer */
+.crumbs{display:flex;flex-wrap:wrap;gap:2px;align-items:center;margin-bottom:10px;font-size:14px}
+.crumbs button{border:0;background:transparent;cursor:pointer;padding:3px 7px;border-radius:6px;color:var(--accent)}
+.crumbs button:last-child{color:var(--ink);font-weight:600;cursor:default}
+.crumbs span{color:var(--ink-3)}
+.tree-row{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(80px,200px) 76px 50px auto;gap:12px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);font-size:14px}
+.tree-row:last-child{border-bottom:0}
+.tree-row.dir{cursor:pointer}
+.tree-row.dir:hover{background:var(--surface-2)}
+.tree-row svg{width:18px;height:18px;color:var(--ink-3)}
+.tree-row.dir svg{color:var(--amber-bar)}
+.tree-name{display:flex;gap:8px;align-items:center;min-width:0}
+.tree-name span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree-row .mini{height:8px}
+.tree-row .mini i{background:var(--accent);opacity:.75}
+.tree-row .pct{font-size:12px;color:var(--ink-3);text-align:right}
+.tree-row .sz{text-align:right;font-weight:600}
+.tree-row.ghost{color:var(--ink-3);font-style:italic}
+
+/* action bar */
+.actionbar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);width:min(1132px,calc(100% - 32px));z-index:20;display:flex;align-items:center;gap:14px;padding:12px 14px 12px 20px;border-radius:14px;background:var(--ink);color:var(--bg);box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.actionbar .sum{flex:1;min-width:0;font-size:14px}
+.actionbar .sum b{font-size:17px}
+.actionbar .btn{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 35%,transparent)}
+.actionbar .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.progress{height:6px;border-radius:3px;background:color-mix(in srgb,var(--bg) 20%,transparent);overflow:hidden;margin-top:6px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .4s}
+
+/* dialog */
+dialog{border:0;border-radius:16px;padding:0;width:min(560px,calc(100% - 32px));background:var(--surface);color:var(--ink);box-shadow:0 30px 80px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(10,16,13,.45)}
+.dlg{padding:22px 24px}
+.dlg h2{font-size:18px;margin-bottom:4px}
+.dlg .lead{color:var(--ink-2);font-size:14px;margin:0 0 14px}
+.sel-list{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:10px;font-size:13px}
+.sel-list div{display:flex;justify-content:space-between;gap:12px;padding:6px 12px;border-bottom:1px solid var(--line)}
+.sel-list div:last-child{border-bottom:0}
+.closeapps{margin:12px 0;font-size:13px;color:var(--ink-2)}
+.closeapps span{display:inline-block;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:0 9px;margin:2px 4px 2px 0}
+.modes{display:grid;gap:8px;margin:14px 0}
+.mode{display:flex;gap:12px;align-items:flex-start;border:1.5px solid var(--line);border-radius:11px;padding:11px 14px;cursor:pointer}
+.mode:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.mode:has(input:disabled){opacity:.5;cursor:not-allowed}
+.mode input{margin-top:4px;accent-color:var(--accent)}
+.mode b{display:block;font-size:14px}
+.mode span{font-size:13px;color:var(--ink-2)}
+.dlg-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.note{font-size:13px;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:10px 0 0}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;box-shadow:var(--shadow)}
+.empty{padding:28px;text-align:center;color:var(--ink-3)}
+footer{margin-top:28px;font-size:12.5px;color:var(--ink-3)}
+@media (max-width:760px){
+  main{padding:18px 16px 150px}
+  .hero-nums{grid-template-columns:1fr 1fr}.hero-nums>div:last-child{grid-column:1/-1}
+  .hero{padding:18px}.hero-nums{gap:16px}.hero-nums .v{font-size:23px;white-space:nowrap}.hero-nums .v small{font-size:13px}
+  .tabs{margin:24px -16px 14px;padding:8px 16px}
+  .row-head{grid-template-columns:auto minmax(0,1fr) auto;padding:11px 14px}
+  .row-head .chev{display:none}
+  .row-body{padding:2px 14px 14px 14px}
+  .tree-row{grid-template-columns:20px minmax(0,1fr) 70px auto;padding:8px 12px}
+  .tree-row .mini,.tree-row .pct{display:none}
+  .grid2{grid-template-columns:1fr}
+  .actionbar{flex-wrap:wrap}
+  .top{flex-direction:column}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div><h1 id="title">磁盘空间清理</h1><div class="meta" id="meta"></div></div>
+    <span class="conn" id="conn"><i></i><span>正在连接…</span></span>
+  </header>
+
+  <section class="card hero" aria-label="磁盘概览">
+    <div class="hero-nums">
+      <div><div class="k">当前可用</div><div class="v num" id="free">—</div><div class="s" id="freeSub"></div></div>
+      <div><div class="k">可放心清理</div><div class="v num" id="safeNum" style="color:var(--accent)">—</div><div class="s" id="safeSub"></div></div>
+      <div><div class="k">系统级可回收</div><div class="v num" id="sysNum" style="color:var(--violet)">—</div><div class="s">回收站、休眠文件、更新残留</div></div>
+    </div>
+    <div class="bar" id="bar" role="img"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <div class="section-title"><h2>建议先做</h2><p>按能腾出的空间排序</p></div>
+  <section class="quick" id="quick"></section>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-tab="clean">清理文件<span class="count" id="cleanCount"></span></button>
+    <button class="tab" role="tab" data-tab="system">系统与大目录</button>
+    <button class="tab" role="tab" data-tab="tree">空间分布</button>
+    <button class="tab" role="tab" data-tab="move" id="moveTab">迁移到其他盘</button>
+    <button class="tab" role="tab" data-tab="about">扫描说明</button>
+  </nav>
+
+  <section data-panel="clean">
+    <div class="toolbar">
+      <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="sr">搜索</span><input id="q" placeholder="搜索应用、目录或说明"></label>
+      <div class="chips" role="group" aria-label="筛选">
+        <button class="chip" data-filter="all" aria-pressed="true">全部</button>
+        <button class="chip" data-filter="优先清理" aria-pressed="false">优先清理</button>
+        <button class="chip" data-filter="需确认" aria-pressed="false">需确认</button>
+      </div>
+      <button class="btn ghost sm" data-act="select-safe">全选优先清理</button>
+      <button class="btn ghost sm" data-act="select-none">清空选择</button>
+    </div>
+    <div id="cats"></div>
+  </section>
+
+  <section data-panel="system" hidden>
+    <div class="section-title" style="margin-top:0"><h2>系统管理的空间</h2><p>由 Windows 工具处理，标有管理员的操作会弹出授权窗口</p></div>
+    <div class="grid2" id="sys"></div>
+    <div class="section-title"><h2>需要你判断的大目录</h2><p>含个人数据或程序本体，只提供打开和处理建议，数值可能与上面重叠</p></div>
+    <div class="grid2" id="review"></div>
+  </section>
+
+  <section data-panel="tree" hidden>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="card" id="tree"></div>
+    <div class="section-title"><h2>最大的文件</h2></div>
+    <div class="card" id="largest"></div>
+  </section>
+
+  <section data-panel="move" hidden>
+    <div class="section-title" style="margin-top:0"><h2 id="moveTitle"></h2><p>改完后新产生的文件写到其他盘，C 盘不再继续增长</p></div>
+    <div class="grid2" id="moves"></div>
+  </section>
+
+  <section data-panel="about" hidden>
+    <div class="card sys" id="about"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</main>
+
+<div class="actionbar" id="bar2" hidden></div>
+
+<dialog id="dlg"><form method="dialog" class="dlg" id="dlgBody"></form></dialog>
+
+<script>
+const DATA = __REPORT_DATA__;
+const TOKEN = '__SESSION_TOKEN__';
+const ONLINE = location.protocol.startsWith('http') && !TOKEN.startsWith('__');
+const SAFE = '优先清理', REVIEW = '需确认';
+const GB = 2 ** 30, MB = 2 ** 20;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => n <= 0 ? '0 GB' : n >= GB ? (n / GB >= 100 ? (n / GB).toFixed(0) : (n / GB).toFixed(1)) + ' GB' : n >= MB ? Math.round(n / MB) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+const ICON = {
+  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2.5h7A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>',
+};
+
+const groups = DATA.groups, byId = Object.fromEntries(groups.map(g => [g.id, g]));
+const groupRoots = new Map(groups.map(g => [g.root.toLowerCase(), g]));
+const S = {connected: false, status: null, selected: new Set(), filter: 'all', q: '', open: new Set(), openCats: new Set(['dev', 'app', 'temp']), tab: 'clean', tree: [DATA.tree], lastJob: null};
+groups.filter(g => g.enabled && g.level === SAFE).forEach(g => S.selected.add(g.id));
+try { const t = localStorage.getItem('sa-tab'); if (t) S.tab = t } catch {}
+
+const done = id => S.status && S.status.done && S.status.done[id];
+const available = g => g.enabled && !done(g.id);
+const sum = list => list.reduce((a, g) => a + g.bytes, 0);
+const sysCard = id => DATA.system.find(c => c.id === id);
+function recycleSize() { const r = S.status && S.status.recycle; return r ? r.size : (sysCard('recycle') || {size: 0}).size }
+function systemReclaim() { return DATA.system.filter(c => c.reclaim).reduce((a, c) => a + (c.id === 'recycle' ? recycleSize() : c.size), 0) }
+
+async function api(path, body) {
+  const r = await fetch(path, {method: body ? 'POST' : 'GET', headers: {'X-Cleanup-Token': TOKEN, ...(body ? {'Content-Type': 'application/json'} : {})}, body: body ? JSON.stringify(body) : undefined});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw Error(d.error || ('请求失败 ' + r.status));
+  return d;
+}
+function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 3200) }
+function needOnline() { if (!S.connected) { toast(ONLINE ? '清理服务未连接，请重新启动 server.py' : '这是离线报告。启动 server.py 后打开它输出的地址才能操作'); return false } return true }
+
+/* ---------- hero ---------- */
+function renderHero() {
+  const disk = S.status ? S.status.disk : DATA.disk, total = DATA.disk.total, free = disk.free;
+  const safe = sum(groups.filter(g => available(g) && g.level === SAFE)), review = sum(groups.filter(g => available(g) && g.level === REVIEW));
+  const sys = systemReclaim(), used = total - free, other = Math.max(0, used - safe - review - sys);
+  const gained = S.status ? S.status.disk.free - S.status.start_free : 0;
+  $('#free').innerHTML = esc(fmt(free)) + `<small>/ ${esc(fmt(total))}</small>` + (gained > 50 * MB ? `<span class="delta">本次 +${esc(fmt(gained))}</span>` : '');
+  $('#freeSub').textContent = `已用 ${Math.round(used / total * 100)}%` + (free / total < .1 ? '，空间告急' : '');
+  $('#safeNum').textContent = fmt(safe);
+  $('#safeSub').textContent = `另有 ${fmt(review)} 需要你确认`;
+  $('#sysNum').textContent = fmt(sys);
+  const segs = [['seg-safe', safe, '可放心清理'], ['seg-review', review, '需确认'], ['seg-sys', sys, '系统级可回收'], ['seg-used', other, '其他已用']];
+  $('#bar').innerHTML = segs.map(([c, v]) => `<i class="${c}" style="width:${v / total * 100}%"></i>`).join('');
+  $('#bar').setAttribute('aria-label', segs.map(([, v, l]) => l + ' ' + fmt(v)).join('，') + '，可用 ' + fmt(free));
+  $('#legend').innerHTML = segs.map(([c, v, l]) => `<span><i class="${c}"></i>${l} <b class="num">${fmt(v)}</b></span>`).join('') + `<span><i class="free"></i>可用 <b class="num">${fmt(free)}</b></span>`;
+}
+
+/* ---------- quick actions ---------- */
+function renderQuick() {
+  const items = [];
+  const safe = groups.filter(g => available(g) && g.level === SAFE);
+  if (safe.length) items.push({size: sum(safe), cls: 'safe', title: '清理可再生的缓存', text: `${safe.length} 项开发工具、浏览器和应用缓存。删除后按需重新生成，不影响个人文件。`, btn: '<button type="button" class="btn primary" data-act="clean-safe">选择全部并清理</button>'});
+  const rb = recycleSize();
+  if (sysCard('recycle') && rb > 100 * MB) items.push({size: rb, cls: 'sys', title: '清空回收站', text: '回收站里的文件仍然占用 C 盘。先打开看一眼，确认没有要找回的。', btn: '<button type="button" class="btn" data-sys="open-recycle">查看</button> <button type="button" class="btn primary" data-sys="empty-recycle">清空回收站</button>'});
+  const h = sysCard('hiberfil');
+  if (h) items.push({size: h.size, cls: 'sys', title: '精简或关闭休眠文件', text: '不用“休眠”功能时可以关闭，最多腾出这么多；精简模式约省一半。', btn: '<button type="button" class="btn" data-goto="system:hiberfil">查看两种方式</button>'});
+  const u = sysCard('update');
+  if (u && u.size > 300 * MB) items.push({size: u.size, cls: 'sys', title: '清理 Windows 更新残留', text: '更新下载缓存、升级残留和旧版本系统文件，用系统自带的磁盘清理处理。', btn: '<button type="button" class="btn" data-sys="cleanmgr">打开磁盘清理</button>'});
+  const review = groups.filter(g => available(g) && g.level === REVIEW);
+  if (review.length) items.push({size: sum(review), cls: 'review', title: '核对旧版本和媒体缓存', text: `${review.length} 项旧版本程序、更新安装包、视频音乐缓存，逐项确认后再清理。`, btn: '<button type="button" class="btn" data-act="show-review">逐项查看</button>'});
+  items.sort((a, b) => b.size - a.size);
+  $('#quick').innerHTML = items.slice(0, 4).map((x, i) => `<article class="card qa"><div class="rank">第 ${i + 1} 步</div><h3>${esc(x.title)}</h3><div class="size num c-${x.cls}">${esc(fmt(x.size))}</div><p>${esc(x.text)}</p><div>${x.btn}</div></article>`).join('') || '<div class="card empty">没有发现明显可清理的大项。</div>';
+}
+
+/* ---------- clean tab ---------- */
+function matches(g) {
+  if (S.filter !== 'all' && g.level !== S.filter) return false;
+  const q = S.q.trim().toLowerCase();
+  return !q || [g.title, g.root, g.why, g.impact, g.close].join(' ').toLowerCase().includes(q);
+}
+function rowHtml(g) {
+  const d = done(g.id), open = S.open.has(g.id), sel = S.selected.has(g.id);
+  const badge = d ? `<span class="badge done">已${d.mode === 'delete' ? '删除' : '移入回收站'} ${esc(fmt(d.bytes))}</span>` : !g.enabled ? '<span class="badge off">仅供查看</span>' : g.level === REVIEW ? '<span class="badge review">需确认</span>' : '';
+  const max = Math.max(1, ...(g.parts || []).map(p => p[1]));
+  const body = open ? `<div class="row-body">
+      <p>${esc(g.why)}</p><p><b>清理后：</b>${esc(g.impact)}</p>${g.close ? `<p><b>建议先关闭：</b>${esc(g.close)}</p>` : ''}
+      ${g.parts && g.parts.length > 1 ? `<div class="parts">${g.parts.map(([n, s]) => `<span class="mono" title="${esc(n)}">${esc(n)}</span><div class="mini"><i style="width:${s / max * 100}%"></i></div><span class="num" style="text-align:right">${esc(fmt(s))}</span>`).join('')}</div>` : ''}
+      <details class="more"><summary>最大的 ${g.samples.length} 个文件</summary><table class="samples">${g.samples.map(f => `<tr><td class="mono">${esc(f.path)}</td><td>${esc(fmt(f.size))} · ${new Date(f.mtime * 1000).toLocaleDateString('zh-CN')}</td></tr>`).join('')}</table></details>
+      <div class="row-actions"><button type="button" class="btn sm" data-open="${esc(g.root)}">${ICON.open}在资源管理器中打开</button><button type="button" class="btn sm" data-list="${g.id}">${ICON.down}下载完整清单</button></div>
+    </div>` : '';
+  return `<div class="row ${open ? 'open' : ''} ${d ? 'cleaned' : ''}" data-row="${g.id}">
+    <div class="row-head" data-toggle="${g.id}">
+      <input type="checkbox" class="ck" data-check="${g.id}" aria-label="选择 ${esc(g.title)}" ${sel && !d ? 'checked' : ''} ${available(g) ? '' : 'disabled'}>
+      <div style="min-width:0"><div class="row-title"><span class="t">${esc(g.title)}</span>${badge}</div><div class="row-sub" title="${esc(g.root)}">${esc(g.root)}</div></div>
+      <div class="row-size num">${esc(fmt(g.bytes))}<small>${g.count.toLocaleString()} 个文件</small></div>${ICON.chev}
+    </div>${body}</div>`;
+}
+function renderClean() {
+  const shown = groups.filter(matches);
+  $('#cleanCount').textContent = groups.filter(available).length;
+  $('#cats').innerHTML = DATA.categories.map(c => {
+    const list = shown.filter(g => g.category === c.id);
+    if (!list.length) return '';
+    const selectable = list.filter(available), picked = selectable.filter(g => S.selected.has(g.id));
+    const open = S.openCats.has(c.id) || S.q;
+    return `<section class="card cat ${open ? 'open' : ''}">
+      <div class="cat-head" data-cat="${c.id}">
+        <input type="checkbox" class="ck" data-catcheck="${c.id}" aria-label="选择全部${esc(c.title)}" ${selectable.length && picked.length === selectable.length ? 'checked' : ''} ${selectable.length ? '' : 'disabled'} data-indet="${picked.length > 0 && picked.length < selectable.length}">
+        <div><h3>${esc(c.title)}</h3><p>${esc(c.desc)}</p></div>
+        <div class="cat-size num">${esc(fmt(sum(list)))}<small>${list.length} 项${picked.length ? ' · 已选 ' + picked.length : ''}</small></div>${ICON.chev}
+      </div>
+      ${open ? `<div class="cat-body">${list.map(rowHtml).join('')}</div>` : ''}
+    </section>`;
+  }).join('') || '<div class="card empty">没有匹配的项目。</div>';
+  document.querySelectorAll('[data-indet=true]').forEach(x => x.indeterminate = true);
+  renderBar();
+}
+
+/* ---------- action bar ---------- */
+function renderBar() {
+  const bar = $('#bar2'), job = S.status && S.status.job;
+  if (job && (job.running || (S.lastJob && S.lastJob.started === job.started && !S.lastJob.dismissed))) {
+    bar.hidden = false;
+    const pct = job.total ? job.processed / job.total * 100 : 0;
+    if (job.running) {
+      bar.innerHTML = `<div class="sum">正在${job.mode === 'delete' ? '删除' : '移入回收站'}：${esc(job.current || '')}<div class="num" style="font-size:13px;opacity:.8">${job.processed.toLocaleString()} / ${job.total.toLocaleString()} 个文件 · 已处理 ${esc(fmt(job.bytes))} · 跳过 ${job.skipped}</div><div class="progress"><i style="width:${pct}%"></i></div></div>`;
+    } else {
+      const recycled = job.mode !== 'delete';
+      bar.innerHTML = `<div class="sum"><b class="num">${recycled ? '已移入回收站' : '已删除'} ${esc(fmt(job.bytes))}</b> · ${job.done_files.toLocaleString()} 个文件${job.skipped ? `，跳过 ${job.skipped} 个（正在使用或扫描后有变化）` : ''}<div style="font-size:13px;opacity:.8">${recycled ? '清空回收站后这些空间才会真正腾出来。' : '空间已经腾出，可用空间已更新。'}</div></div>
+        ${job.skipped ? '<button type="button" class="btn sm" data-act="job-errors">跳过明细</button>' : ''}
+        ${recycled ? '<button type="button" class="btn primary" data-sys="empty-recycle">清空回收站</button>' : ''}
+        <button type="button" class="btn sm" data-act="dismiss">知道了</button>`;
+    }
+    return;
+  }
+  const sel = [...S.selected].map(id => byId[id]).filter(available);
+  bar.hidden = !sel.length || S.tab !== 'clean';
+  if (!sel.length) return;
+  bar.innerHTML = `<div class="sum">已选 <b class="num">${sel.length}</b> 项，共 <b class="num">${esc(fmt(sum(sel)))}</b>${sel.some(g => g.level === REVIEW) ? '<span style="opacity:.75">（含需确认的项目）</span>' : ''}</div>
+    <button type="button" class="btn sm" data-act="select-none">清空选择</button>
+    <button type="button" class="btn primary" data-act="clean-selected" ${S.connected ? '' : 'title="启动清理服务后可用"'}>清理所选…</button>`;
+}
+
+/* ---------- dialogs ---------- */
+function openDialog(html) { $('#dlgBody').innerHTML = html; $('#dlg').showModal(); const c = $('#dlgBody [data-cancel]'); c && c.focus() }
+function cleanDialog() {
+  if (!needOnline()) return;
+  const sel = [...S.selected].map(id => byId[id]).filter(available);
+  if (!sel.length) return toast('先勾选要清理的项目');
+  const review = sel.some(g => g.level === REVIEW);
+  const appBytes = new Map();
+  sel.forEach(g => g.close && appBytes.set(g.close, (appBytes.get(g.close) || 0) + g.bytes));
+  const apps = [...appBytes].sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  openDialog(`<h2>清理 ${sel.length} 项，共 ${esc(fmt(sum(sel)))}</h2>
+    <p class="lead">只处理扫描清单里、扫描后没有变化的文件。正在使用的文件会自动跳过。</p>
+    <div class="sel-list">${sel.sort((a, b) => b.bytes - a.bytes).map(g => `<div><span>${esc(g.title)}${g.level === REVIEW ? ' <span class="badge review">需确认</span>' : ''}</span><span class="num">${esc(fmt(g.bytes))}</span></div>`).join('')}</div>
+    ${apps.length ? `<div class="closeapps">建议先关闭：${apps.slice(0, 8).map(a => `<span>${esc(a)}</span>`).join('')}${apps.length > 8 ? `等 ${apps.length} 个应用。` : ''}没关的应用，正在使用的文件会被跳过。</div>` : ''}
+    <div class="modes">
+      <label class="mode"><input type="radio" name="mode" value="recycle" checked><div><b>移入回收站</b><span>可以从回收站恢复。清空回收站后才会腾出空间。</span></div></label>
+      <label class="mode"><input type="radio" name="mode" value="delete" ${review ? 'disabled' : ''}><div><b>直接删除，立即腾出空间</b><span>${review ? '所选包含“需确认”的项目，只能移入回收站。' : '不经过回收站，无法恢复。这些都是可以重新生成的缓存。'}</span></div></label>
+    </div>
+    <div class="dlg-foot"><button class="btn" value="cancel" data-cancel>取消</button><button type="button" class="btn primary" data-act="run-clean">开始清理</button></div>`);
+}
+const SYS_TEXT = {
+  'empty-recycle': ['清空回收站', '回收站里的所有文件会被永久删除，之后无法恢复。点击后 Windows 会再弹出一次确认框（可能出现在浏览器后面，留意任务栏）。'],
+  'cleanmgr': ['打开磁盘清理', '点击后 Windows 会请求管理员授权。打开后勾选“Windows 更新清理”“临时文件”等项目，再点“确定”。'],
+  'remove-sd-old': ['删除旧更新目录', '删除 SoftwareDistribution.old.* 目录。这是重置 Windows 更新时留下的旧副本，Windows 不再使用。需要管理员授权，删除后无法恢复。'],
+  'dism-cleanup': ['运行组件清理', '会打开一个管理员命令窗口运行 DISM，耗时 5–20 分钟，期间可以继续使用电脑。完成后无法卸载已安装的旧更新。'],
+  'hibernate-reduced': ['精简休眠文件', '保留“快速启动”，去掉完整休眠能力，休眠文件缩小约一半。需要管理员授权，随时可以改回。'],
+  'hibernate-off': ['关闭休眠', '删除整个休眠文件，同时关闭“休眠”和“快速启动”，开机可能慢几秒。需要管理员授权，执行 powercfg /h on 可以恢复。'],
+};
+function systemDialog(action) {
+  if (!needOnline()) return;
+  const t = SYS_TEXT[action];
+  if (!t) return runSystem(action);
+  openDialog(`<h2>${esc(t[0])}</h2><p class="lead">${esc(t[1])}</p>
+    <div class="dlg-foot"><button class="btn" value="cancel" data-cancel>取消</button><button type="button" class="btn primary" data-run-sys="${action}">${esc(t[0])}</button></div>`);
+}
+async function runSystem(action) {
+  try { await api('/api/system', {action, confirmed: true}); $('#dlg').open && $('#dlg').close(); toast(action === 'empty-recycle' ? '请在 Windows 确认框中选择“是”' : SYS_TEXT[action] && /管理员/.test(SYS_TEXT[action][1]) ? '请在管理员授权窗口中选择“是”' : '已打开'); poll() }
+  catch (e) { toast(e.message) }
+}
+async function runClean() {
+  const mode = ($('#dlgBody input[name=mode]:checked') || {}).value || 'recycle';
+  const ids = [...S.selected].filter(id => available(byId[id]));
+  try { await api('/api/clean', {ids, mode, confirmed: true}); $('#dlg').close(); S.lastJob = null; await poll(); S.lastJob = S.status.job }
+  catch (e) { toast(e.message) }
+}
+
+/* ---------- system tab ---------- */
+function cmdHtml(c) { return `<div class="cmd"><code>${esc(c)}</code><button type="button" class="btn ghost sm" data-copy="${esc(c)}" aria-label="复制命令">${ICON.copy}</button></div>` }
+function renderSystem() {
+  $('#sys').innerHTML = DATA.system.map(c => {
+    const size = c.id === 'recycle' ? recycleSize() : c.size;
+    return `<article class="card sys" id="sys-${c.id}">
+      <div class="sys-head"><h3>${esc(c.title)}</h3>${size ? `<span class="sys-size num" style="color:${c.reclaim ? 'var(--violet)' : 'var(--ink)'}">${esc(fmt(size))}</span>` : ''}</div>
+      <p>${esc(c.explain)}</p>${c.impact ? `<div class="impact">${esc(c.impact)}</div>` : ''}
+      ${c.parts ? `<div class="kv">${c.parts.map(([p, s]) => `<span class="mono">${esc(p)}</span><span class="num">${esc(fmt(s))}</span>`).join('')}</div>` : ''}
+      ${(c.commands || []).length ? `<details class="more"><summary>手动执行的命令（管理员 PowerShell）</summary>${c.commands.map(cmdHtml).join('')}</details>` : ''}
+      ${c.actions.length ? `<div class="acts">${c.actions.map(a => `<button type="button" class="btn ${a.danger ? 'danger' : ''}" data-sys="${a.id}">${esc(a.label)}${a.admin ? ' <span class="shield">管理员</span>' : ''}</button>`).join('')}</div>` : ''}
+    </article>`;
+  }).join('');
+  $('#review').innerHTML = DATA.review.map(r => `<article class="card sys">
+      <div class="sys-head"><h3>${esc(r.title)}</h3><span class="sys-size num">${esc(fmt(r.size))}</span></div>
+      <div class="mono">${esc(r.path)}</div><p>${esc(r.explain)}</p><div class="impact">${esc(r.advice)}</div>
+      <div class="acts"><button type="button" class="btn sm" data-open="${esc(r.path)}">${ICON.open}在资源管理器中打开</button><button type="button" class="btn sm ghost" data-goto-tree="${esc(r.path)}">查看构成</button></div>
+    </article>`).join('') || '<div class="card empty">没有需要单独判断的大目录。</div>';
+}
+
+/* ---------- tree tab ---------- */
+function findNode(path) {
+  const target = path.toLowerCase(), stack = [[DATA.tree]];
+  while (stack.length) {
+    const trail = stack.pop(), node = trail[trail.length - 1];
+    if (node.p.toLowerCase() === target) return trail;
+    for (const c of node.c || []) if (!c.f && target.startsWith(c.p.toLowerCase())) stack.push([...trail, c]);
+  }
+  return null;
+}
+function renderTree() {
+  const node = S.tree[S.tree.length - 1], kids = node.c || [];
+  $('#crumbs').innerHTML = S.tree.map((n, i) => `${i ? '<span>›</span>' : ''}<button type="button" data-crumb="${i}">${esc(i ? n.n : n.n)}</button>`).join('');
+  const max = Math.max(1, ...kids.map(k => k.s));
+  let rows = kids.map(k => {
+    const g = groupRoots.get(k.p.toLowerCase());
+    return `<div class="tree-row ${k.c ? 'dir' : ''}" ${k.c ? `data-drill="${esc(k.p)}"` : ''}>
+      ${k.f ? ICON.file : ICON.folder}
+      <div class="tree-name"><span title="${esc(k.p)}">${esc(k.n)}</span>${g ? `<span class="badge ${g.level === REVIEW ? 'review' : 'done'}">可清理</span>` : ''}</div>
+      <div class="mini"><i style="width:${k.s / max * 100}%"></i></div>
+      <div class="sz num">${esc(fmt(k.s))}</div><div class="pct num">${(k.s / node.s * 100).toFixed(k.s / node.s < .1 ? 1 : 0)}%</div>
+      <button type="button" class="btn ghost sm" data-open="${esc(k.p)}" aria-label="在资源管理器中打开 ${esc(k.n)}">${ICON.open}</button>
+    </div>`;
+  }).join('');
+  const shownSum = kids.reduce((a, k) => a + k.s, 0), rest = node.s - shownSum;
+  if (rest > 50 * MB) rows += `<div class="tree-row ghost"><span></span><div class="tree-name"><span>其余较小的文件和文件夹</span></div><div></div><div class="sz num">${esc(fmt(rest))}</div><div></div><span></span></div>`;
+  if (S.tree.length === 1 && /^[a-z]:\\?$/i.test(DATA.root)) {
+    const hidden = DATA.disk.used - DATA.scanned_bytes;
+    if (hidden > 200 * MB) rows += `<div class="tree-row ghost"><span></span><div class="tree-name"><span>无权限读取的系统区域（卷影副本、其他用户、受保护目录）</span></div><div></div><div class="sz num">${esc(fmt(hidden))}</div><div></div><span></span></div>`;
+  }
+  $('#tree').innerHTML = rows || '<div class="empty">这个文件夹里没有超过 50 MB 的内容。</div>';
+  $('#largest').innerHTML = DATA.largest.slice(0, 25).map(f => `<div class="tree-row">${ICON.file}<div class="tree-name"><span class="mono" title="${esc(f.path)}" style="font-size:12.5px">${esc(f.path)}</span></div><div></div><div class="sz num">${esc(fmt(f.size))}</div><div></div><button type="button" class="btn ghost sm" data-open="${esc(f.path)}" aria-label="打开所在位置">${ICON.open}</button></div>`).join('');
+}
+
+/* ---------- move + about ---------- */
+function renderMove() {
+  const m = DATA.moves;
+  if (!m || !m.target || !m.items.length) { $('#moveTab').hidden = true; return }
+  $('#moveTitle').textContent = `${m.target} 盘还有 ${fmt(m.free)} 可用，这些内容适合放过去`;
+  $('#moves').innerHTML = m.items.map(i => `<article class="card sys"><div class="sys-head"><h3>${esc(i.title)}</h3><span class="sys-size num">${esc(fmt(i.size))}</span></div>
+    <div class="mono">${esc(i.path)}</div>${i.command ? cmdHtml(i.command) : ''}<p>${esc(i.hint)}</p></article>`).join('');
+}
+function renderAbout() {
+  $('#about').innerHTML = `<h3>这份报告是怎么来的</h3>
+    <p>只读取了文件名、大小和修改时间，没有打开任何文件内容。共扫描 ${DATA.scanned.toLocaleString()} 个文件（${esc(fmt(DATA.scanned_bytes))}）。</p>
+    <p>${DATA.errors} 处因权限无法读取，${DATA.reparse} 个链接或云端占位文件没有跟进，这些位置的大小未计入。显示的是文件的逻辑大小；硬链接（主要在 WinSxS）会让系统目录看起来比实际大。</p>
+    <p>清理时只处理扫描清单里的普通文件，并且要求文件位于你的用户目录内、大小和修改时间与扫描时一致。系统目录只通过 Windows 自带工具处理。</p>
+    <p>清理之后想看到最新状态，请让助手重新扫描生成新报告；本页的“可用空间”会实时刷新，候选清单停留在扫描那一刻。</p>
+    ${DATA.coverage_errors.length ? `<details class="more"><summary>无法读取的位置（前 ${DATA.coverage_errors.length} 个）</summary>${DATA.coverage_errors.map(e => `<div class="mono" style="margin-top:6px">${esc(e.path)}<br>${esc(e.error)}</div>`).join('')}</details>` : ''}`;
+  $('#foot').textContent = '数据只保存在本机。清理服务只监听 127.0.0.1，每个操作都需要在页面上确认；操作记录保存在扫描目录的 operations.jsonl。';
+}
+
+/* ---------- tabs + events ---------- */
+function setTab(t) {
+  S.tab = t; try { localStorage.setItem('sa-tab', t) } catch {}
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== t);
+  renderBar();
+}
+function renderAll() { renderHero(); renderQuick(); renderClean(); renderSystem(); renderTree(); renderMove(); renderAbout() }
+
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-act],[data-sys],[data-run-sys],[data-check],[data-catcheck],[data-toggle],[data-cat],[data-open],[data-list],[data-copy],[data-drill],[data-crumb],[data-goto],[data-goto-tree],[data-tab],[data-filter]');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.check) { e.stopPropagation(); t.checked ? S.selected.add(d.check) : S.selected.delete(d.check); renderClean(); return }
+  if (d.catcheck) { e.stopPropagation(); const list = groups.filter(g => g.category === d.catcheck && matches(g) && available(g)); const all = list.every(g => S.selected.has(g.id)); list.forEach(g => all ? S.selected.delete(g.id) : S.selected.add(g.id)); renderClean(); return }
+  if (d.open !== undefined) { e.stopPropagation(); if (needOnline()) api('/api/open', {path: d.open}).catch(x => toast(x.message)); return }
+  if (d.list) { if (!needOnline()) return; try { download(await api('/api/files/' + d.list), '文件清单-' + byId[d.list].title + '.json') } catch (x) { toast(x.message) } return }
+  if (d.copy) { copy(d.copy); return }
+  if (d.toggle) { S.open.has(d.toggle) ? S.open.delete(d.toggle) : S.open.add(d.toggle); renderClean(); return }
+  if (d.cat) { S.openCats.has(d.cat) ? S.openCats.delete(d.cat) : S.openCats.add(d.cat); renderClean(); return }
+  if (d.tab) { setTab(d.tab); return }
+  if (d.filter) { S.filter = d.filter; document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === t)); renderClean(); return }
+  if (d.drill) { const trail = findNode(d.drill); if (trail) { S.tree = trail; renderTree() } return }
+  if (d.crumb) { S.tree = S.tree.slice(0, +d.crumb + 1); renderTree(); return }
+  if (d.gotoTree) { const trail = findNode(d.gotoTree); if (trail) { S.tree = trail; setTab('tree'); renderTree(); scrollTo({top: $('#tabs').offsetTop, behavior: 'smooth'}) } return }
+  if (d.goto) { const [tab, id] = d.goto.split(':'); setTab(tab); document.getElementById('sys-' + id)?.scrollIntoView({behavior: 'smooth', block: 'center'}); return }
+  if (d.sys) { systemDialog(d.sys); return }
+  if (d.runSys) { runSystem(d.runSys); return }
+  switch (d.act) {
+    case 'select-safe': groups.filter(g => available(g) && g.level === SAFE).forEach(g => S.selected.add(g.id)); renderClean(); break;
+    case 'select-none': S.selected.clear(); renderClean(); break;
+    case 'clean-safe': S.selected = new Set(groups.filter(g => available(g) && g.level === SAFE).map(g => g.id)); renderClean(); cleanDialog(); break;
+    case 'clean-selected': cleanDialog(); break;
+    case 'run-clean': runClean(); break;
+    case 'show-review': setTab('clean'); S.filter = REVIEW; document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.filter === REVIEW)); DATA.categories.forEach(c => S.openCats.add(c.id)); renderClean(); scrollTo({top: $('#tabs').offsetTop, behavior: 'smooth'}); break;
+    case 'dismiss': if (S.lastJob) S.lastJob.dismissed = true; renderBar(); break;
+    case 'job-errors': try { download(await api('/api/job'), '跳过明细.json') } catch (x) { toast(x.message) } break;
+  }
+});
+$('#q').addEventListener('input', e => { S.q = e.target.value; renderClean() });
+function download(data, name) { const u = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'})); const a = document.createElement('a'); a.href = u; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000) }
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text) } catch { const ta = document.createElement('textarea'); ta.value = text; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove() }
+  toast('已复制');
+}
+
+/* ---------- live status ---------- */
+let timer = null;
+async function poll() {
+  if (!ONLINE) return setConn('off', '离线报告 · 启动清理服务后可操作');
+  try {
+    const prev = S.status && S.status.job;
+    S.status = await api('/api/status');
+    S.connected = true; setConn('on', '已连接本机清理服务');
+    const job = S.status.job;
+    if (prev && prev.running && !job.running) { S.lastJob = job; job.ids.forEach(id => S.selected.delete(id)) }
+    const r = S.status.recycle, sig = JSON.stringify([Math.round(S.status.disk.free / 1e7), r && r.size, Object.keys(S.status.done).length, job.running, job.processed, job.started]);
+    if (sig !== S.sig) {
+      S.sig = sig;
+      renderHero(); renderQuick();
+      const rs = document.querySelector('#sys-recycle .sys-size');
+      if (rs) rs.textContent = fmt(recycleSize());
+      if (job.running || (prev && prev.running)) renderClean(); else renderBar();
+    }
+  } catch (e) {
+    S.connected = false; setConn('off', /入口/.test(e.message) ? '清理服务已重启，请刷新页面' : '清理服务已断开，请重新启动 server.py');
+  }
+  clearTimeout(timer); timer = setTimeout(poll, S.status && S.status.job.running ? 1000 : 4000);
+}
+function setConn(cls, text) { const c = $('#conn'); c.className = 'conn ' + cls; c.lastElementChild.textContent = text }
+
+$('#meta').textContent = `${DATA.root} · 扫描于 ${new Date(DATA.created * 1000).toLocaleString('zh-CN', {month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'})} · ${DATA.scanned.toLocaleString()} 个文件`;
+$('#title').textContent = /^[a-z]:\\?$/i.test(DATA.root) ? DATA.root.slice(0, 2).toUpperCase().replace(':', ' 盘') + '空间清理' : '磁盘空间清理';
+setTab(S.tab); renderAll(); poll();
+</script>
+</body>
+</html>
