@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import defaultdict
 from ctypes import wintypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -23,7 +24,7 @@ from win32com.shell import shell, shellcon
 from send2trash.win.IFileOperationProgressSink import FileOperationProgressSink
 from win32com.server.exception import COMException
 
-from common import parser, existing_output, storage_dir, guarded_path
+from common import parser, existing_output, storage_dir, guarded_path, guarded_dir, REPARSE, OFFLINE
 
 SAFE = '优先清理'
 p = parser('启动仅本机可访问的清理服务')
@@ -50,8 +51,8 @@ LOCK = threading.Lock()
 SYSTEM_JOB = {}
 
 
-def validate(record):
-    return guarded_path(record, Path.home(), MANIFEST['root'])
+def validate(record, checked=None):
+    return guarded_path(record, Path.home(), MANIFEST['root'], checked)
 
 
 def openable_paths():
@@ -72,20 +73,29 @@ def openable_paths():
 OPENABLE = openable_paths()
 
 
+BATCH = 500
+
+
 class RecycleSink(FileOperationProgressSink):
-    def __init__(self, records):
+    def __init__(self, items):
         super().__init__()
-        self.records = {r['path'].lower(): r for r in records}
+        self.allowed = {path.lower() for path, _, _ in items}
         self.results = []
+
+    def covers(self, path):
+        key = path.lower()
+        while key not in self.allowed:
+            parent = os.path.dirname(key)
+            if parent == key:
+                return False
+            key = parent
+        return True
 
     def PreDeleteItem(self, flags, item):
         if not flags & shellcon.TSF_DELETE_RECYCLE_IF_POSSIBLE:
             raise COMException('只允许放进回收站', scode=-2147467259)
-        path = item.GetDisplayName(shellcon.SIGDN_FILESYSPATH)
-        try:
-            validate(self.records[path.lower()])
-        except Exception as exc:
-            raise COMException(str(exc), scode=-2147467259)
+        if not self.covers(item.GetDisplayName(shellcon.SIGDN_FILESYSPATH)):
+            raise COMException('目标不在本次清理计划中', scode=-2147467259)
         return 0
 
     def PostDeleteItem(self, flags, item, result, new_item):
@@ -95,17 +105,17 @@ class RecycleSink(FileOperationProgressSink):
         return 0
 
 
-def recycle(records):
+def recycle(items):
+    """Move validated files and whole directories to the recycle bin in one shell operation."""
     pythoncom.CoInitialize()
-    sink = RecycleSink(records)
+    sink = RecycleSink(items)
     error = None
     try:
         operation = pythoncom.CoCreateInstance(shell.CLSID_FileOperation, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IFileOperation)
-        operation.SetOperationFlags(0x20000000 | 0x00080000 | shellcon.FOFX_EARLYFAILURE | shellcon.FOF_NOERRORUI | shellcon.FOF_NOCONFIRMATION | shellcon.FOF_SILENT)
+        operation.SetOperationFlags(0x20000000 | 0x00080000 | shellcon.FOF_NOERRORUI | shellcon.FOF_NOCONFIRMATION | shellcon.FOF_SILENT)
         wrapped = pythoncom.WrapObject(sink, shell.IID_IFileOperationProgressSink)
-        for r in records:
-            item = shell.SHCreateItemFromParsingName(validate(r), None, shell.IID_IShellItem)
-            operation.DeleteItem(item, wrapped)
+        for path, _, _ in items:
+            operation.DeleteItem(shell.SHCreateItemFromParsingName(path, None, shell.IID_IShellItem), wrapped)
         result = operation.PerformOperations()
         if result or operation.GetAnyOperationsAborted():
             error = f'系统取消或部分文件无法回收：{result}'
@@ -113,66 +123,158 @@ def recycle(records):
         error = str(exc)
     finally:
         pythoncom.CoUninitialize()
-    return sink.results, error
+    ok = {r['path'].lower() for r in sink.results if r['ok']}
+    return [dict(path=path, ok=path.lower() in ok, files=len(recs)) for path, recs, _ in items], sink.results, error
 
 
-def delete(records):
-    """Permanently remove regenerable cache files; returns per-file results."""
+def remove_tree(path, records):
+    """Delete a verified directory; returns the manifest records still on disk afterwards."""
+    def retry(func, target, exc):
+        if isinstance(exc, PermissionError):
+            try:
+                os.chmod(target, stat.S_IWRITE)
+                func(target)
+            except OSError:
+                pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=retry)
+    else:
+        shutil.rmtree(path, onerror=lambda func, target, info: retry(func, target, info[1]))
+    return [r for r in records if os.path.lexists(r['path'])] if os.path.lexists(path) else []
+
+
+def delete(items):
     results = []
-    for r in records:
+    for path, recs, is_dir in items:
         try:
-            path = validate(r)
+            if is_dir:
+                left = remove_tree(path, recs)
+                results.append(dict(path=path, ok=not left, files=len(recs), left=[r['path'] for r in left]))
+                continue
             try:
                 os.remove(path)
             except PermissionError:
                 os.chmod(path, stat.S_IWRITE)
                 os.remove(path)
-            results.append({'path': path, 'ok': True})
+            results.append(dict(path=path, ok=True, files=1))
         except Exception as exc:
-            results.append({'path': r['path'], 'ok': False, 'error': str(exc)})
-    return results
+            results.append(dict(path=path, ok=False, files=len(recs), error=str(exc)))
+    return results, results, None
 
 
-def note_error(path, error):
-    JOB['skipped'] += 1
+def plan(group, checked):
+    """Split a group into whole directories holding only unchanged manifest files, plus loose files.
+
+    A directory qualifies when every entry below it is a manifest file with the scanned size and
+    mtime, or an empty directory, with no reparse points. The group root itself stays file-level.
+    """
+    root = group['root'].rstrip('\\')
+    records = {r['path'].lower(): r for r in group['files']}
+    children = defaultdict(set)
+    for r in group['files']:
+        folder = os.path.dirname(r['path'])
+        while folder.lower().startswith(root.lower() + '\\'):
+            parent = os.path.dirname(folder)
+            children[parent.lower()].add(folder)
+            folder = parent
+    memo = {}
+
+    def covered(folder):
+        key = folder.lower()
+        if key not in memo:
+            memo[key] = False
+            try:
+                with os.scandir(folder) as entries:
+                    for e in entries:
+                        st = e.stat(follow_symlinks=False)
+                        if st.st_file_attributes & (REPARSE | OFFLINE):
+                            return False
+                        if e.is_dir(follow_symlinks=False):
+                            if not covered(e.path):
+                                return False
+                        else:
+                            r = records.get(e.path.lower())
+                            if r is None or r['size'] != st.st_size or r['mtime'] != st.st_mtime:
+                                return False
+            except OSError:
+                return False
+            memo[key] = True
+        return memo[key]
+
+    units, stack = [], [root]
+    while stack:
+        folder = stack.pop()
+        for child in children.get(folder.lower(), ()):
+            (units if covered(child) else stack).append(child)
+    unit_keys = {u.lower(): u for u in units}
+    members, loose = defaultdict(list), []
+    for r in group['files']:
+        key = os.path.dirname(r['path']).lower()
+        while key not in unit_keys and len(key) > len(root):
+            key = os.path.dirname(key)
+        (members[key] if key in unit_keys else loose).append(r)
+    items = []
+    for key, folder in unit_keys.items():
+        try:
+            items.append((guarded_dir(folder, Path.home(), MANIFEST['root'], checked), members[key], True))
+        except Exception:
+            loose.extend(members[key])
+    return items, loose
+
+
+def note_error(path, error, count=1):
+    JOB['skipped'] += count
     if len(JOB['errors']) < 2000:
-        JOB['errors'].append({'path': path, 'error': error})
+        JOB['errors'].append({'path': path, 'error': error, 'files': count})
+
+
+def process(group, items, mode, log):
+    """Run batches and return the directory units that failed as a whole."""
+    retry = []
+    for start in range(0, len(items), BATCH):
+        batch = items[start:start + BATCH]
+        outcome, raw, error = (delete if mode == 'delete' else recycle)(batch)
+        for (path, recs, is_dir), result in zip(batch, outcome):
+            if result['ok']:
+                JOB['done_files'] += len(recs)
+                JOB['bytes'] += sum(r['size'] for r in recs)
+            elif is_dir and mode == 'recycle':
+                retry.append((path, recs))
+                continue
+            elif is_dir and result.get('left') is not None:
+                left = set(x.lower() for x in result['left'])
+                gone = [r for r in recs if r['path'].lower() not in left]
+                JOB['done_files'] += len(gone)
+                JOB['bytes'] += sum(r['size'] for r in gone)
+                note_error(path, '部分文件正在使用，未能删除', len(left))
+            else:
+                note_error(path, result.get('error') or error or '未获得回收站成功回执', len(recs))
+            JOB['processed'] += len(recs)
+        log.write(json.dumps({'time': time.time(), 'group': group['id'], 'mode': mode, 'results': raw, 'error': error}, ensure_ascii=False) + '\n')
+        log.flush()
+    return retry
 
 
 def run_job(groups, mode):
     try:
-        for group in groups:
-            JOB['current'] = group['title']
-            before = JOB['bytes']
-            skipped_before = JOB['skipped']
-            files = group['files']
-            for start in range(0, len(files), 100):
-                chunk = []
-                for r in files[start:start + 100]:
+        with (BASE / 'operations.jsonl').open('a', encoding='utf-8') as log:
+            for group in groups:
+                JOB['current'] = group['title']
+                before, skipped_before, checked = JOB['bytes'], JOB['skipped'], set()
+                units, loose = plan(group, checked)
+                retry = process(group, units, mode, log)
+                # A directory with an open file cannot move as a whole; retry its files one by one.
+                loose += [r for _, recs in retry for r in recs]
+                files = []
+                for r in loose:
                     try:
-                        validate(r)
-                        chunk.append(r)
+                        files.append((validate(r, checked), [r], False))
                     except Exception as exc:
                         note_error(r['path'], str(exc))
-                if mode == 'delete':
-                    results, error = delete(chunk), None
-                    failed = {x['path'].lower(): x.get('error') for x in results if not x['ok']}
-                else:
-                    results, error = recycle(chunk) if chunk else ([], None)
-                    succeeded = {x['path'].lower() for x in results if x['ok']}
-                    failed = {r['path'].lower(): error or '未获得回收站成功回执' for r in chunk if r['path'].lower() not in succeeded}
-                for r in chunk:
-                    if r['path'].lower() in failed:
-                        note_error(r['path'], failed[r['path'].lower()])
-                    else:
-                        JOB['done_files'] += 1
-                        JOB['bytes'] += r['size']
-                JOB['processed'] += len(files[start:start + 100])
-                with (BASE / 'operations.jsonl').open('a', encoding='utf-8') as f:
-                    f.write(json.dumps({'time': time.time(), 'group': group['id'], 'mode': mode, 'results': results, 'error': error}, ensure_ascii=False) + '\n')
-            freed = JOB['bytes'] - before
-            DONE[group['id']] = dict(mode=mode, bytes=freed, skipped=JOB['skipped'] - skipped_before, time=time.time())
-            DONE_FILE.write_text(json.dumps(DONE, ensure_ascii=False), encoding='utf-8')
+                        JOB['processed'] += 1
+                process(group, files, mode, log)
+                DONE[group['id']] = dict(mode=mode, bytes=JOB['bytes'] - before, skipped=JOB['skipped'] - skipped_before, time=time.time())
+                DONE_FILE.write_text(json.dumps(DONE, ensure_ascii=False), encoding='utf-8')
     except Exception as exc:
         JOB['errors'].append({'error': str(exc)})
     finally:

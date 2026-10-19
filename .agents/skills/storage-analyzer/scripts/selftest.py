@@ -143,11 +143,52 @@ with tempfile.TemporaryDirectory(prefix='storage-analyzer-test-') as temporary:
         job = wait_job()
         assert job['done_files'] == 1 and job['bytes'] == 4096 and not cache.exists(), job
         assert json.loads((output / 'cleaned.json').read_text(encoding='utf-8'))['cache']['mode'] == 'delete'
+
+        # Whole-directory units: only directories made entirely of unchanged manifest files move at once.
+        tree = root / 'tree'
+        def make(rel, data=b'z' * 512):
+            target = tree / rel; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+            s = target.stat(); return dict(path=str(target), size=s.st_size, mtime=s.st_mtime)
+        def run_group(group, mode):
+            service.GROUPS[group['id']] = group
+            service.JOB = dict(running=True, mode=mode, ids=[group['id']], current=None, total=len(group['files']), processed=0,
+                               done_files=0, skipped=0, bytes=0, errors=[], started=time.time())
+            service.run_job([group], mode)
+            return service.JOB
+        recs = [make('clean/a/1.bin'), make('clean/b/2.bin'), make('mixed/3.bin'), make('changed/4.bin'), make('locked/5.bin'), make('locked/6.bin')]
+        make('mixed/new.bin')
+        (tree / 'changed/4.bin').write_bytes(b'changed after scan')
+        group = dict(id='tree', title='目录测试', root=str(tree), enabled=True, level='优先清理', files=recs)
+        units, loose = service.plan(group, set())
+        assert sorted(Path(u).name for u, _, _ in units) == ['clean', 'locked'], units
+        assert sorted(Path(r['path']).name for r in loose) == ['3.bin', '4.bin'], loose
+        with open(tree / 'locked/5.bin', 'rb'):
+            job = run_group(group, 'delete')
+        assert job['done_files'] == 4 and job['skipped'] == 2, job
+        assert not (tree / 'clean').exists() and not (tree / 'mixed/3.bin').exists() and not (tree / 'locked/6.bin').exists()
+        assert (tree / 'mixed/new.bin').exists() and (tree / 'changed/4.bin').exists() and (tree / 'locked/5.bin').exists()
+        if args.recycle:
+            held, free = make('busy/7.bin', b'held'), make('busy/8.bin', b'free')
+            with open(held['path'], 'rb'):
+                job = run_group(dict(id='busy', title='占用测试', root=str(tree), enabled=True, level='需确认', files=[held, free]), 'recycle')
+            assert job['done_files'] == 1 and job['skipped'] == 1 and Path(held['path']).exists() and not Path(free['path']).exists(), job
+            logs = [json.loads(line) for line in (output / 'operations.jsonl').read_text(encoding='utf-8').splitlines()]
+            back = next(r['recycle_path'] for e in logs for r in e.get('results', []) if r.get('ok') and r['path'] == free['path'])
+            import pythoncom
+            from win32com.shell import shell, shellcon
+            pythoncom.CoInitialize()
+            try:
+                op = pythoncom.CoCreateInstance(shell.CLSID_FileOperation, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IFileOperation)
+                op.SetOperationFlags(shellcon.FOF_NOCONFIRMATION | shellcon.FOF_NOERRORUI | shellcon.FOF_SILENT)
+                op.MoveItem(shell.SHCreateItemFromParsingName(back, None, shell.IID_IShellItem), shell.SHCreateItemFromParsingName(str(tree / 'busy'), None, shell.IID_IShellItem), '8.bin', None)
+                op.PerformOperations()
+            finally: pythoncom.CoUninitialize()
+            assert Path(free['path']).read_bytes() == b'free'
         if args.recycle:
             assert post('/api/clean', {'ids': ['fixture'], 'confirmed': True}, T) == 202
             assert wait_job()['done_files'] == 1, service.JOB
             logs = [json.loads(line) for line in (output / 'operations.jsonl').read_text(encoding='utf-8').splitlines()]
-            receipt = next(entry['results'][0] for entry in logs if entry.get('mode') == 'recycle' and entry.get('results'))
+            receipt = next(r for entry in logs for r in entry.get('results', []) if r.get('ok') and r['path'] == str(file))
             recycled = Path(receipt['recycle_path'])
             assert recycled.read_text(encoding='utf-8') == 'storage analyzer synthetic fixture'
             import pythoncom
@@ -163,4 +204,4 @@ with tempfile.TemporaryDirectory(prefix='storage-analyzer-test-') as temporary:
     finally:
         http.shutdown(); http.server_close(); thread.join()
 print(json.dumps({'scan': 'passed', 'classification': 'passed', 'override': 'passed', 'path_guards': 'passed', 'http_guards': 'passed',
-                  'delete': 'passed', 'recycle_restore': 'passed' if args.recycle else 'not_requested'}))
+                  'delete': 'passed', 'directory_units': 'passed', 'recycle_restore': 'passed' if args.recycle else 'not_requested'}))
