@@ -48,6 +48,7 @@ DONE = json.loads(DONE_FILE.read_text(encoding='utf-8')) if DONE_FILE.exists() e
 START_FREE = shutil.disk_usage(DRIVE).free
 JOB = {'running': False}
 LOCK = threading.Lock()
+STOPPING = threading.Event()
 SYSTEM_JOB = {}
 
 
@@ -330,7 +331,6 @@ def old_update_dirs():
 
 
 def empty_recycle():
-    SYSTEM_JOB['empty-recycle'] = 'running'
     try:
         # Flags 0 keeps the Windows confirmation dialog.
         result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, DRIVE, 0)
@@ -346,6 +346,7 @@ def system_action(action):
     elif action == 'empty-recycle':
         if SYSTEM_JOB.get('empty-recycle') == 'running':
             raise RuntimeError('Windows 确认框已打开，请在任务栏中找到它')
+        SYSTEM_JOB['empty-recycle'] = 'running'
         threading.Thread(target=empty_recycle, daemon=True).start()
     elif action == 'storage-settings':
         os.startfile('ms-settings:storagesense')
@@ -440,10 +441,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {'ok': True})
             if data.get('confirmed') is not True:
                 raise ValueError('请先在页面上确认')
+            if route == '/api/shutdown':
+                with LOCK:
+                    if JOB['running'] or 'running' in SYSTEM_JOB.values():
+                        return self.reply(409, {'error': '清理任务正在进行，请完成后再退出服务'})
+                    STOPPING.set()
+                try:
+                    self.reply(200, {'ok': True})
+                finally:
+                    threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
             if route == '/api/system':
                 if data.get('action') not in ALLOWED_ACTIONS:
                     raise ValueError('该操作不适用于本次扫描')
-                system_action(data['action'])
+                with LOCK:
+                    if STOPPING.is_set():
+                        return self.reply(409, {'error': '服务正在退出'})
+                    system_action(data['action'])
                 return self.reply(200, {'ok': True})
             if route != '/api/clean':
                 raise ValueError('未知接口')
@@ -458,6 +472,8 @@ class Handler(BaseHTTPRequestHandler):
             if mode == 'delete' and any(g['level'] != SAFE for g in groups):
                 raise ValueError('“需确认”的文件群只能移入回收站')
             with LOCK:
+                if STOPPING.is_set():
+                    return self.reply(409, {'error': '服务正在退出'})
                 if JOB['running']:
                     return self.reply(409, {'error': '已有清理任务正在进行'})
                 JOB = dict(running=True, mode=mode, ids=ids, current=None, total=sum(len(g['files']) for g in groups),
@@ -481,3 +497,5 @@ if __name__ == '__main__':
         server.serve_forever()
     finally:
         server.server_close()
+        if state_file.exists() and json.loads(state_file.read_text(encoding='utf-8')).get('pid') == os.getpid():
+            state_file.unlink()

@@ -3,6 +3,8 @@ import argparse
 import importlib.util
 import json
 import os
+import re
+import socket
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -126,6 +128,19 @@ with tempfile.TemporaryDirectory(prefix='storage-analyzer-test-') as temporary:
 
     T = service.TOKEN
     try:
+        assert post('/api/shutdown', {'confirmed': True}) == 403
+        assert post('/api/shutdown', {'confirmed': True}, T, 'http://untrusted.example') == 403
+        assert post('/api/shutdown', {'confirmed': False}, T) == 400
+        service.JOB['running'] = True
+        assert post('/api/shutdown', {'confirmed': True}, T) == 409
+        service.JOB['running'] = False
+        service.SYSTEM_JOB['empty-recycle'] = 'running'
+        assert post('/api/shutdown', {'confirmed': True}, T) == 409
+        service.SYSTEM_JOB.clear()
+        assert not service.STOPPING.is_set()
+        service.STOPPING.set()
+        assert post('/api/clean', {'ids': ['fixture'], 'confirmed': True}, T) == 409
+        service.STOPPING.clear()
         assert post('/api/clean', {'ids': ['fixture'], 'confirmed': True}) == 403
         assert post('/api/clean', {'ids': ['fixture'], 'confirmed': True}, T, 'http://untrusted.example') == 403
         assert post('/api/clean', {'ids': ['fixture'], 'confirmed': False}, T) == 400
@@ -201,7 +216,32 @@ with tempfile.TemporaryDirectory(prefix='storage-analyzer-test-') as temporary:
                 op.PerformOperations()
                 assert file.read_text(encoding='utf-8') == 'storage analyzer synthetic fixture'
             finally: pythoncom.CoUninitialize()
+        assert post('/api/shutdown', {'confirmed': True}, T) == 200
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+        assert service.STOPPING.is_set()
     finally:
         http.shutdown(); http.server_close(); thread.join()
+
+    # Verify the CLI process releases its listener and removes its state record.
+    process = subprocess.Popen([sys.executable, '-u', str(P / 'server.py'), '--output', str(output),
+                                '--state-dir', str(work / 'state')], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        origin = process.stdout.readline().strip()
+        assert origin.startswith('http://127.0.0.1:'), process.stderr.read() if process.poll() is not None else origin
+        with urllib.request.urlopen(origin) as response:
+            html = response.read().decode('utf-8')
+        token = re.search(r"const TOKEN = '([^']+)'", html).group(1)
+        request = urllib.request.Request(origin + '/api/shutdown', data=b'{"confirmed":true}',
+                                         headers={'Origin': origin, 'X-Cleanup-Token': token, 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+        assert process.wait(timeout=5) == 0, process.stderr.read()
+        assert not list((work / 'state').glob('*.json'))
+        with socket.socket() as probe:
+            assert probe.connect_ex(('127.0.0.1', int(origin.rsplit(':', 1)[1]))) != 0
+    finally:
+        if process.poll() is None:
+            process.terminate(); process.wait(timeout=5)
 print(json.dumps({'scan': 'passed', 'classification': 'passed', 'override': 'passed', 'path_guards': 'passed', 'http_guards': 'passed',
-                  'delete': 'passed', 'directory_units': 'passed', 'recycle_restore': 'passed' if args.recycle else 'not_requested'}))
+                  'delete': 'passed', 'directory_units': 'passed', 'shutdown': 'passed', 'recycle_restore': 'passed' if args.recycle else 'not_requested'}))

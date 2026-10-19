@@ -56,6 +56,7 @@ a{color:var(--accent)}
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}
 .top h1{font-size:24px}
 .top .meta{font-size:13px;color:var(--ink-3);margin-top:2px}
+.service-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .conn{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}
 .conn i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
 .conn.on i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -240,7 +241,10 @@ footer{margin-top:28px;font-size:12.5px;color:var(--ink-3)}
 <main>
   <header class="top">
     <div><h1 id="title">磁盘空间清理</h1><div class="meta" id="meta"></div></div>
-    <span class="conn" id="conn"><i></i><span>正在连接…</span></span>
+    <div class="service-controls">
+      <span class="conn" id="conn" role="status"><i></i><span>正在连接…</span></span>
+      <button type="button" class="btn sm" id="exitService" data-act="exit-service" disabled title="停止后台服务并释放端口">退出服务</button>
+    </div>
   </header>
 
   <section class="card hero" aria-label="磁盘概览">
@@ -347,6 +351,16 @@ async function api(path, body) {
 }
 function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 3200) }
 function needOnline() { if (!S.connected) { toast(ONLINE ? '清理服务未连接，请重新启动 server.py' : '这是离线报告。启动 server.py 后打开它输出的地址才能操作'); return false } return true }
+async function exitService() {
+  if (!needOnline() || S.exiting) return;
+  S.exiting = true; $('#exitService').disabled = true;
+  try {
+    await api('/api/shutdown', {confirmed: true});
+    S.stopped = true; S.connected = false; clearTimeout(timer);
+    setConn('off', '服务已退出 · 后台端口已关闭'); renderBar();
+  } catch (e) { toast(e.message) }
+  finally { S.exiting = false; $('#exitService').disabled = !S.connected }
+}
 
 /* ---------- hero ---------- */
 function renderHero() {
@@ -598,6 +612,7 @@ document.addEventListener('click', async e => {
   if (d.sys) { systemDialog(d.sys); return }
   if (d.runSys) { runSystem(d.runSys); return }
   switch (d.act) {
+    case 'exit-service': exitService(); break;
     case 'select-safe': groups.filter(g => available(g) && g.level === SAFE).forEach(g => S.selected.add(g.id)); renderClean(); break;
     case 'select-none': S.selected.clear(); renderClean(); break;
     case 'clean-safe': S.selected = new Set(groups.filter(g => available(g) && g.level === SAFE).map(g => g.id)); renderClean(); cleanDialog(); break;
@@ -618,10 +633,13 @@ async function copy(text) {
 /* ---------- live status ---------- */
 let timer = null;
 async function poll() {
+  if (S.stopped) return;
   if (!ONLINE) return setConn('off', '离线报告 · 启动清理服务后可操作');
   try {
     const prev = S.status && S.status.job;
-    S.status = await api('/api/status');
+    const status = await api('/api/status');
+    if (S.stopped) return;
+    S.status = status;
     S.connected = true; setConn('on', '已连接本机清理服务');
     const job = S.status.job;
     if (prev && prev.running && !job.running) { S.lastJob = job; job.ids.forEach(id => S.selected.delete(id)) }
@@ -634,11 +652,12 @@ async function poll() {
       if (job.running || (prev && prev.running)) renderClean(); else renderBar();
     }
   } catch (e) {
+    if (S.stopped) return;
     S.connected = false; setConn('off', /入口/.test(e.message) ? '清理服务已重启，请刷新页面' : '清理服务已断开，请重新启动 server.py');
   }
   clearTimeout(timer); timer = setTimeout(poll, S.status && S.status.job.running ? 1000 : 4000);
 }
-function setConn(cls, text) { const c = $('#conn'); c.className = 'conn ' + cls; c.lastElementChild.textContent = text }
+function setConn(cls, text) { const c = $('#conn'); c.className = 'conn ' + cls; c.lastElementChild.textContent = text; $('#exitService').disabled = !S.connected || S.exiting }
 
 $('#meta').textContent = `${DATA.root} · 扫描于 ${new Date(DATA.created * 1000).toLocaleString('zh-CN', {month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'})} · ${DATA.scanned.toLocaleString()} 个文件`;
 $('#title').textContent = /^[a-z]:\\?$/i.test(DATA.root) ? DATA.root.slice(0, 2).toUpperCase().replace(':', ' 盘') + '空间清理' : '磁盘空间清理';

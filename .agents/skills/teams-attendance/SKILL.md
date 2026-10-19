@@ -19,8 +19,9 @@ TEAMS_AUTHORIZATION=你的授权令牌
 ## 功能
 
 1. **考勤数据获取**：调用 API 获取指定月份考勤打卡明细。
-2. **工时统计与预测**：自动计算累计工时、日均工时，并预测剩余工作日达标所需工时。
-3. **CSV 导出**：自动保存考勤明细（默认落盘至仓库根 `data/teams-attendance/attendance_YYYYMM.csv`；设置 `LLM_SKILLS_DATA_DIR` 时改写到 `$LLM_SKILLS_DATA_DIR/teams-attendance/`，找不到仓库根时写到 `~/.llm-skills/data/teams-attendance/`）。
+2. **工时统计与预测**：自动计算累计工时、日均工时，并预测剩余工作日达标所需工时；出差日的工时与工作日均不计入。
+3. **出差日补登**：平台未标注出差（备注为空、resultList 为空）的日期，写入 `.local/teams-attendance/trip_dates.json`（JSON 字符串数组，如 `["2026-10-16"]`）后按出差计；已标注的日期不受影响。
+4. **CSV 导出**：自动保存考勤明细（默认落盘至仓库根 `data/teams-attendance/attendance_YYYYMM.csv`；设置 `LLM_SKILLS_DATA_DIR` 时改写到 `$LLM_SKILLS_DATA_DIR/teams-attendance/`，找不到仓库根时写到 `~/.llm-skills/data/teams-attendance/`）。
 
 ---
 

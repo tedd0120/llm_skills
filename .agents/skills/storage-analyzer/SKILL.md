@@ -58,6 +58,7 @@ description: 分析 Windows 磁盘占用，生成可勾选清理的本机网页�
 - **系统与大目录**：清空回收站（Windows 再确认一次）、精简或关闭休眠、磁盘清理、删除旧更新目录、组件清理、打开虚拟内存和应用设置。标“管理员”的操作会弹出 UAC 授权窗口。
 - **空间分布**：从磁盘根目录逐层下钻，可在资源管理器中打开任意列出的位置。
 - **迁移到其他盘**：存在可用空间大于 30 GB 的其他固定磁盘时，列出缓存目录改位置的命令和文件夹迁移方法。
+- **退出服务**：点击右上角按钮，停止后台服务并释放端口。正在清理时提示等待任务完成。退出后本页仍可查看报告。
 
 ## 安全边界
 
@@ -77,6 +78,6 @@ description: 分析 Windows 磁盘占用，生成可勾选清理的本机网页�
 
 目录优先级：显式 `--output`；`LLM_SKILLS_DATA_DIR/storage-analyzer`（状态用 `LLM_SKILLS_STATE_DIR`）；从脚本位置向上找到的仓库 `data/storage-analyzer`（状态 `.local/storage-analyzer`）；`~/.llm-skills/data/storage-analyzer`（状态 `~/.llm-skills/local/storage-analyzer`）。默认在产出根下新建时间目录。清单含本机私有路径，保持本地保存。
 
-修改脚本后执行 `python scripts/selftest.py --recycle`：覆盖扫描、分类规则、决策覆盖、路径与 HTTP 校验、直接删除，以及测试文件的回收站往返恢复。
+修改脚本后执行 `python scripts/selftest.py --recycle`：覆盖扫描、分类规则、决策覆盖、路径与 HTTP 校验、直接删除、测试文件的回收站往返恢复，以及退出服务后的进程结束、端口释放和状态记录移除。
 
 分级思路参考 [khazix-skills/storage-analyzer](https://github.com/KKKKhazix/khazix-skills/tree/main/storage-analyzer)。

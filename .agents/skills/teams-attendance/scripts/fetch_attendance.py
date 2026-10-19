@@ -7,6 +7,7 @@ Teams考勤数据获取脚本
 - TEAMS_AUTHORIZATION: 授权令牌
 """
 import os
+import json
 import argparse
 import requests
 import pandas as pd
@@ -24,6 +25,15 @@ TEAMS_EM_CODE = os.getenv('TEAMS_EM_CODE')
 SKILL_NAME = 'teams-attendance'
 TEAMS_AUTHORIZATION = os.getenv('TEAMS_AUTHORIZATION')
 
+# 这些备注的当天既不计入工时分子，也不计入工作日分母
+EXCLUDED_NOTES = ('出差',)
+
+
+def _counted(df: pd.DataFrame) -> pd.DataFrame:
+    """剔除不计入统计的日期，只留参与工时与工作日核算的行。"""
+    return df[~df['备注'].fillna('').isin(EXCLUDED_NOTES)]
+
+
 def _data_dir() -> Path:
     """产出目录：LLM_SKILLS_DATA_DIR → 仓库根 data/ → ~/.llm-skills/data/，末级为本 skill 名。"""
     base = os.getenv('LLM_SKILLS_DATA_DIR')
@@ -39,6 +49,27 @@ def _data_dir() -> Path:
 
 def _default_output(check_month: str) -> str:
     return str(_data_dir() / f"attendance_{check_month.replace('-', '')}.csv")
+
+
+def _state_dir() -> Path:
+    """本机状态目录：LLM_SKILLS_STATE_DIR → 仓库根 .local/ → ~/.llm-skills/local/，末级为本 skill 名。"""
+    base = os.getenv('LLM_SKILLS_STATE_DIR')
+    if base:
+        return Path(base) / SKILL_NAME
+    for parent in Path(__file__).resolve().parents:
+        if parent == Path.home():
+            break
+        if (parent / '.git').exists():
+            return parent / '.local' / SKILL_NAME
+    return Path.home() / '.llm-skills' / 'local' / SKILL_NAME
+
+
+def _trip_dates() -> set:
+    """平台未标注的出差日：读取本机申报的日期列表（trip_dates.json）。"""
+    path = _state_dir() / 'trip_dates.json'
+    if not path.exists():
+        return set()
+    return set(json.loads(path.read_text(encoding='utf-8')))
 
 
 def _check_env():
@@ -64,11 +95,9 @@ def print_statistics(today: str, att_df: pd.DataFrame, check_month: str) -> None
         att_df: 考勤明细 DataFrame
         check_month: 查询月份 (YYYY-MM)
     """
-    # 计算已工作天数（不包含今天，使用有效工作日字段）
-    past_data = att_df[att_df['日期'] < today]
+    # 已工作天数与累计工时：均排除今天与不计入的日期
+    past_data = _counted(att_df[att_df['日期'] < today])
     worked_days = past_data['有效工作日'].sum()
-
-    # 计算已累计工时（不包含今天）
     worked_hours = past_data['工时'].sum()
 
     # 计算当前平均工时
@@ -167,12 +196,16 @@ def _print_detail_table(today: str, att_df: pd.DataFrame, check_month: str) -> N
 
         print(f"│ {date_str}   │ {start_time}    │ {end_time}    │ {hours}  │ {note:<6s} │")
 
-    # 汇总信息
-    total_days = len(detail_df)
-    total_hours = detail_df['工时'].sum()
+    # 汇总信息：按有效工作日与计入工时统计
+    counted_df = _counted(detail_df)
+    total_days = detail_df['有效工作日'].sum()
+    total_hours = counted_df['工时'].sum()
 
     print()
     print(f"共 {total_days} 个工作日，累计 {total_hours:.2f} 小时")
+    excluded_days = len(detail_df) - len(counted_df)
+    if excluded_days:
+        print(f"（{'/'.join(EXCLUDED_NOTES)} {excluded_days} 天不计入工时与工作日）")
 
 def get_att_data(em_code: str, cycle: str, authorization: str) -> Optional[dict]:
     """
@@ -246,12 +279,22 @@ def parsed_att_date(check_month: str, em_code: Optional[str] = None, authorizati
     # 按日期去重，保留第一条记录（同一日期可能有多条备注记录）
     att_df = att_df[att_df['月份'] == check_month].drop_duplicates(subset=['日期']).reset_index(drop=True)
 
+    # 平台备注缺失的出差日，按本机申报补齐标记
+    declared = _trip_dates() & set(att_df['日期'])
+    blank = att_df['备注'].isna() | (att_df['备注'].astype(str).str.strip() == '')
+    filled = att_df.loc[att_df['日期'].isin(declared) & blank, '日期'].tolist()
+    if filled:
+        att_df.loc[att_df['日期'].isin(filled), '备注'] = '出差'
+        print(f"已按本机申报标记出差：{', '.join(sorted(filled))}")
+
     att_df['工时'] = (pd.to_datetime(att_df['下班打卡']) - pd.to_datetime(att_df['上班打卡'])).dt.total_seconds() / 3600
     att_df.loc[att_df['假期flag'] != 0, '工时'] = 0
 
     # 计算有效工作日
     def calc_workday(s):
         if s['假期flag'] != 0:
+            return 0
+        if s['备注'] in EXCLUDED_NOTES:
             return 0
         if pd.isna(s['备注']) or s['备注'] in ['迟到', '早退']:
             return 1
@@ -263,7 +306,7 @@ def parsed_att_date(check_month: str, em_code: Optional[str] = None, authorizati
 
     # 统计
     today = pd.Timestamp.now().strftime("%Y-%m-%d")
-    calc_data = att_df[att_df['日期'] < today]
+    calc_data = _counted(att_df[att_df['日期'] < today])
     valid_days, valid_hours = calc_data['有效工作日'].sum(), calc_data['工时'].sum()
     avg_hours = round(valid_hours / valid_days, 2) if valid_days > 0 else 0
 
