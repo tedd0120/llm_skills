@@ -46,7 +46,6 @@
 | :--- | :--- | :--- | :--- |
 | **`think-like-fable`** | 软件开发与复杂任务的系统化方法论路由与执行框架 | 接收任何非平凡开发任务（如调试、重构、性能优化等）时自动触发 | 无 |
 | **`least-code`** | 反过度设计准则：写码前的存在性阶梯、假想敌拦截，以及既有代码的安全精简与评审 | 编写/重构/评审代码，或用户提到"简化""精简""YAGNI"等 | 无 |
-| **`no-negative-echo`** | 清除交付面中仅存在于工作会话的负向回声，让产物只描述已接受的终态 | 用户纠正、方案淘汰或多轮迭代后生成最终交付物 | 无 |
 | **`brainstorming`** | 陪练式头脑风暴：定框、发散、逼问假设、收敛、落地方案文档 | **仅手动触发**：Claude `/brainstorming`、Codex `$brainstorming` | 无 |
 
 > 部分技能包含内部辅助组件（如 `xiaohongshu-fetch`、`xiaohongshu-summarize`、`xiaohongshu-formatter` 等），均由入口技能自动编排调用，无需手动触发。
@@ -85,7 +84,6 @@ llm_skills/
 │       ├── git-weekly-summary/      # Git 周报生成技能包
 │       ├── least-code/              # 反过度设计准则技能包
 │       ├── litellm-model-speedtest/ # LiteLLM 网关模型测速技能包
-│       ├── no-negative-echo/        # 交付面负向回声清除技能包
 │       ├── pan123-renamer/          # 123云盘重命名技能包
 │       ├── subagent-task-runner/    # Subagent 分步执行框架
 │       ├── teams-attendance/        # Teams 考勤分析技能包

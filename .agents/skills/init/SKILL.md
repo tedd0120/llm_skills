@@ -1,47 +1,28 @@
 ---
 name: init
-description: 新建项目时一键初始化 AGENTS.md 与 CLAUDE.md，或对存量项目进行查漏补缺。配置语言规范、Git安全红线、阶段规划与实时状态跟踪、方案确认后执行、.work/ 任务工作区与产物目录、测试剃刀原则、代码检索及 Skill 渐进式披露指引。
+description: 新建项目时初始化 AGENTS.md、CLAUDE.md 与 .gitignore，或对存量项目查漏补缺。配置语言与措辞、沟通与方案设计、编码与文件操作、Git 操作、阶段规划与实时状态跟踪、.work/ 任务工作区与产物目录、测试剃刀原则、代码检索及 Skill 渐进式披露指引。
 ---
 
-# 项目初始化与规范对齐（init）
+# 项目初始化与规范补全（init）
 
-支持两种工作场景：
-1. **全新项目初始化**：一键生成标准单真源双文件（`CLAUDE.md` 与 `AGENTS.md`）及工程基础设施。
-2. **存量项目查漏补缺**：当已有 `AGENTS.md` 或 `CLAUDE.md` 时，严格遵循非侵入原则，仅追加缺失的通用规则板块，完整保留既有业务规范。
+读取 [templates/AGENTS.md](templates/AGENTS.md) 作为通用规范正本，使用文件读写与编辑工具完成目标项目的初始化或增量补全。
 
-## 核心规范
+## 全新项目初始化
 
-- **双文件单真源**：`CLAUDE.md` 引用 `@AGENTS.md`，所有规则收口在 `AGENTS.md`。
-- **模板单真源**：标准正本存放在 `templates/`：
-  - `templates/CLAUDE.md`：单真源入口声明。
-  - `templates/AGENTS.md`：包含 7 项通用规则（语言、Git 安全红线、`.work/<任务ID>/plan.md` 阶段与状态跟踪及方案确认、`.work/` 任务工作区与 `.local/` 本机状态、测试剃刀原则、代码检索、Skill 渐进式披露与文件级隔离）。
+目标项目根目录不存在 `AGENTS.md` 与 `CLAUDE.md` 时：
 
-## 执行方式
+1. 将 [templates/AGENTS.md](templates/AGENTS.md) 写入根目录 `AGENTS.md`。
+2. 在根目录创建 `CLAUDE.md`，写入 `@AGENTS.md`。
+3. 检查根目录 `.gitignore`，缺失 `.work/` 或 `.local/` 时追加。
 
-优先运行配套脚本执行初始化或查漏补缺：
+## 存量项目查漏补缺
 
-```bash
-# 默认对当前工作目录进行初始化或查漏补缺
-python <skill-dir>/scripts/init_project.py
+目标项目根目录已存在 `AGENTS.md` 或 `CLAUDE.md` 时，保留既有业务配置与自定义规则，按以下顺序补全：
 
-# 指定目标项目路径
-python <skill-dir>/scripts/init_project.py /path/to/project
-
-# 强制覆盖已有文件（仅在需要彻底重置项目规则时使用）
-python <skill-dir>/scripts/init_project.py /path/to/project --force
-```
-
-## 两种场景流转
-
-### 场景 1：全新项目初始化（未检测到 AGENTS.md / CLAUDE.md）
-
-1. **定位项目根目录**：以目标路径或向上找 `.git` 确定项目根。
-2. **复制标准文件**：将 `templates/CLAUDE.md` 与 `templates/AGENTS.md` 写入项目根目录。
-3. **维护忽略规则**：在根目录 `.gitignore` 中追加 `.work/` 与 `.local/`。
-
-### 场景 2：存量项目查漏补缺（已存在 AGENTS.md 或 CLAUDE.md）
-
-查阅 **[references/patch-audit.md](references/patch-audit.md)** 进行增量比对与补齐：
-1. **`CLAUDE.md` 单真源核对**：检查是否包含 `@AGENTS.md` 引用，缺失时前置注入引用声明。
-2. **`AGENTS.md` 规则核对**：比对 7 大标准通用板块，仅将缺失的板块追加至文件末尾，原样保留既有业务配置。既有规则仍使用 `docs/plans/`、`.prototype/` 等旧产物目录时，不追加工作区相关板块，提示改用 workspace-layout skill 迁移。
-3. **忽略规则补齐**：`.gitignore` 缺少 `.work/`、`.local/` 时追加。
+1. **`CLAUDE.md` 单真源引用**：若缺少 `@AGENTS.md`，在 `CLAUDE.md` 顶部前置插入 `@AGENTS.md`；若 `CLAUDE.md` 包含独立业务规则，将其迁移合并至 `AGENTS.md` 后保留 `@AGENTS.md` 单行引用。
+2. **`AGENTS.md` 规则比对与补齐**：对照 [templates/AGENTS.md](templates/AGENTS.md) 的 9 个板块逐项核对既有 `AGENTS.md`：
+   - 既有板块缺少模板中的具体规则条文时，将缺失条文补充至对应板块。
+   - 完全缺失的板块追加至 `AGENTS.md` 末尾。
+   - 既有 `AGENTS.md` 仍使用 `docs/plans`、`.prototype/`、`.prototypes/`、`.tmp/` 等旧产物目录时，跳过 `任务规划与执行状态` 与 `工作区与产物目录` 两个板块，提示用户使用 `workspace-layout` 技能迁移。
+3. **`.gitignore` 规则补齐**：缺失 `.work/` 或 `.local/` 时追加至文件末尾。
+4. **变更回显**：向用户列出本次保留的既有板块与新增补齐的板块或条文。
