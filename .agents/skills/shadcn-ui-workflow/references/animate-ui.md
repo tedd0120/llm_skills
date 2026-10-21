@@ -1,43 +1,31 @@
 # Animate UI 选型与接入
 
-## 选型
+## 选型与版本核对
 
-- 将 [Animate UI](https://animate-ui.com/docs)（仓库 [imskyleen/animate-ui](https://github.com/imskyleen/animate-ui)）作为动效增强与微交互组件候选。
-- 适用场景与分类：
-  - 动效原语（Primitives）：自带过渡动画的手风琴、对话框、选项卡、开关、浮动卡片（`accordion`, `dialog`, `tabs`, `switch`, `tooltip`，基于 Radix UI、Base UI 或 Headless UI）。
-  - 交互按钮（Buttons）：波纹、流体、翻转、主题切换、点赞计数等动效按钮（`ripple`, `liquid`, `flip`, `theme-toggler`, `copy`）。
-  - 文本与数字动效（Texts）：平滑滚动计数器、字符打散进入动效（`sliding-number`, `splitting`）。
-  - 动态背景（Backgrounds）：粒子星空、气泡上浮、烟花、重力轨迹（`stars`, `bubble`, `gravity-stars`, `fireworks`）。
-  - 动效图标（Animated Icons）：带悬停或触发微动效的图标集合。
+- **适用场景**：将 [Animate UI](https://animate-ui.com/docs)（仓库 [imskyleen/animate-ui](https://github.com/imskyleen/animate-ui)）用于应用内交互控件与微交互：
+  - **交互控件原语**：为 Accordion、Dialog、Tabs、Switch、Tooltip 等控件添加状态过渡与弹簧反馈。
+  - **应用内微交互组件**：波纹/流体/翻转等交互按钮（`ripple`, `liquid`, `flip`, `copy`）、应用内滑动计数器（`sliding-number`）、交互态动效图标及微交互背景。
+- **版本与环境前提**：先检查 `package.json` 与 `components/animate-ui/` 本地目录。当前 v2（`@animate-ui/react`）提供 Radix UI、Base UI、React Aria 动效原语，要求 **React 19** 与 `motion`；使用 `@animate-ui/cli` 要求 **Node.js >= 22.12**（详见 [包文档](https://animate-ui.com/docs/react) 与 [CLI 文档](https://animate-ui.com/docs/cli)）。环境不满足时说明具体版本缺口并保持现有实现。
 
-## 源码与安装
+## 接入方式
 
-1. 确认项目满足 React、Tailwind CSS 与 `motion`（`motion/react`）依赖前提。
-2. 通过 shadcn CLI 按需添加：
-   ```bash
-   npx shadcn@latest add @animate-ui/<组件路径>
-   ```
-   例如添加滚动数字或波纹按钮：
-   ```bash
-   npx shadcn@latest add @animate-ui/primitives-texts-sliding-number
-   npx shadcn@latest add @animate-ui/buttons-ripple
-   ```
-3. 手动引入：查阅 [Animate UI 官方文档](https://animate-ui.com/docs) 复制代码到项目 UI 目录，按项目别名调整工具函数与依赖导入路径。
-4. 审查生成文件、动画依赖与 CSS 类差异。
+安装核心依赖（如 `npm install @animate-ui/react motion`）后，按项目现有组件形态选择接入路径（详见 [Installation](https://animate-ui.com/docs/installation)）：
 
-## 依赖与性能评估
+- **已有 shadcn/ui 组件**：先通过 `--dry-run` 预览 CLI 对目标组件的改造范围：
+  ```bash
+  npx @animate-ui/cli@latest animate accordion --dry-run
+  ```
+  核对无误后去掉 `--dry-run` 执行（仅在任务明确覆盖全量组件时使用 `animate all`）。CLI 会替换底层原语导入并清理被 Motion 接管的 CSS 动画类。
+- **直接组合无头基础库的组件**：按基础库替换原语导入路径（如 Radix Dialog 替换为 `@animate-ui/react/primitives/radix-ui/dialog`，Base UI Dialog 替换为 `@animate-ui/react/primitives/base-ui/dialog`），并移除同一元素上冲突的 CSS 进出场过渡。
+- **微交互组件与动效图标**：按组件页面文档从对应子路径导出或拷入源码。
+- **v1 本地源码迁移**：对照 [官方迁移说明](https://github.com/imskyleen/animate-ui/blob/main/skills/animate-ui/references/migrate.md) 评估本地定制与调用方后执行迁移。
 
-- 组件强依赖 `motion`（`motion/react`）。
-- 动效背景（如粒子、烟花）涉及持续帧率渲染，在首屏或关键转化路径上使用时需监测重绘与 GPU 占用。
-- 遵循用户的减少动画偏好（`prefers-reduced-motion`），在禁用动效环境下提供即时状态呈现。
+## 特有样式与节奏适配
 
-## 样式与可访问性适配
-
-- 动画组件遵循项目 Tailwind 主题颜色变量（`primary`, `muted`, `accent` 等）。
-- 动效数字与文本变动保证屏幕阅读器正确播报最终内容（配置 `aria-live="polite"`）。
-- 弹窗与折叠组件保持原底层库（Radix/Base UI）原生的键盘导航与焦点管理机制。
+- **居中定位冲突排查**：Tailwind CSS v3 的 `-translate-x-1/2 -translate-y-1/2` 类会与 Motion 的 `transform` 属性冲突，需核对弹窗实际居中位置；Tailwind CSS v4 使用独立 `translate` 属性时可正常共存。
+- **全局节奏控制**：需要统一调整动画速率时，在外层挂载 `AnimateUIProvider` 并配置 `tempo` 属性。
 
 ## 按需资料
 
-- 浏览全部组件与示例：[Animate UI Components](https://animate-ui.com/docs/components)。
-- LLM 上下文参考：[llms-full.txt](https://animate-ui.com/llms-full.txt)。
+- 组件文档：[Animate UI Docs](https://animate-ui.com/docs)
+- 进阶规则与图标制作：[官方 Animate UI skill](https://github.com/imskyleen/animate-ui/blob/main/skills/animate-ui/SKILL.md)
