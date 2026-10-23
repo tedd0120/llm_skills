@@ -47,6 +47,8 @@ description: 为桌面应用设计或审查基于 GitHub Releases 的自动更�
 
 读取 [references/release-contract.md](references/release-contract.md)；仓库为私有或由客户端持 Token 访问时，加读 [references/private-releases.md](references/private-releases.md)。
 
+更新签名与操作系统代码签名分别判断。Windows 使用独立更新签名且不强制 Authenticode 的条件，见框架参考与 [发布签名契约](references/release-contract.md#签名要求与-windows-分发)。
+
 对照锁文件中的精确版本查阅官方文档、类型定义与本地依赖源码，输出“能力 / 精确版本 / API 或配置 / 证据位置 / 限制”核查表（附核查日期），逐项回答：
 
 - **请求与代理：** 元数据、清单、安装包分别由哪个 HTTP 客户端发起？代理与鉴权覆盖哪些请求？

@@ -6,6 +6,7 @@
 
 - **产物与配置绑定：** 更新签名包、公钥（`pubkey`）、`endpoints`、平台 target key（如 `windows-x86_64`、`darwin-aarch64`）及安装模式（如 Windows NSIS / MSI 的 `installMode`）由 Tauri CLI、`tauri-plugin-updater` 与构建 Action 共同决定。
 - **签名密钥管理：** 为 Tauri updater 专用的 minisign 私钥制定 CI Secret 注入、安全备份与密钥轮换方案。
+- **Windows 签名要求：** Tauri updater 的 minisign 更新签名用于校验更新包，密钥可自行生成。Authenticode 由 Windows 分发要求独立决定。核查锁定插件的 `verify_signature` 与 Windows 安装路径，分别记录更新包验签和系统代码签名结果。
 - **公开与私有仓库分流：** 公开仓库可直接使用 GitHub Releases 静态 `latest.json` 清单地址；私有仓库需核实插件能否为清单请求与资产包下载分别配置 GitHub Asset API 地址、`Accept` / `Authorization` 请求头及代理。
 - **Rust 端收口管理：** 私有凭据由 Rust 服务从系统凭据库读取。由 Rust 统一接管更新生命周期时，排查前端 `@tauri-apps/plugin-updater`、旧版 IPC 命令与 `capabilities` 权限声明是否仍有残留调用方。
 - **Windows 强制退出与资源清理：** Windows 安装器拉起时可能直接终止宿主进程；关闭数据库连接、刷盘日志与终止子进程的清理逻辑，必须挂载在插件源码实际执行的退出前钩子上。

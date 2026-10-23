@@ -11,6 +11,14 @@
 - **检查、下载与安装解耦：** 对照锁定版本核实 `autoDownload`、`autoInstallOnAppQuit`、显式调用 `quitAndInstall(isSilent, isForceRunAfter)` 的行为差异。文档中的新字段需在本地锁定的 `node_modules` 类型与源码中确认已受支持。
 - **双层签名与系统交互：** 分别核实 `electron-updater` 的发布者名称/证书校验与操作系统级代码签名（macOS Developer ID 签名与公证、Windows Authenticode 证书与 UAC 提权弹窗）。跨主版本升级 `electron-builder` 时，查阅对应版本的签名校验变更说明。
 
+### Windows NSIS 的独立更新签名
+
+用户选择不使用 Authenticode 时，核实锁定版本的 `NsisUpdater.verifySignature`、`app-update.yml` 生成与 `win.verifyUpdateCodeSignature` 行为。例如 `electron-updater 6.8.9` 在未配置 `publisherName` 时跳过 Authenticode 校验；此行为需要独立更新签名建立信任。
+
+可由 Ed25519 签名原始清单字节，客户端先验签再解析 YAML，再按签名清单核验安装包摘要、大小、版本与架构。将更新公钥随安装包分发，私钥只放安全存储和 CI Secret。CI 构建、远端草稿校验与安装前检查均保留此验证链。配套关闭强制代码签名、证书 Secrets 与发布者名称要求，核查打包配置未留下隐式证书校验。
+
+采用更新器原生清单签名时，以锁定版本源码验证其实际能力。其他 Electron 发行机制及 macOS 的签名要求按各自协议核查。
+
 ## 运行时与迁移审查重点
 
 - **窗口关闭与进程退出：** 核查点击窗口关闭按钮是隐藏至系统托盘还是真正退出；检查 `window-all-closed`、`before-quit`、`will-quit` 中的拦截逻辑是否阻塞 `quitAndInstall`；确保业务数据库刷盘与子进程回收完成后再拉起安装器。
