@@ -1,0 +1,7 @@
+interface:
+  display_name: "GitHub Releases 自动更新方案"
+  short_description: "为桌面应用设计或审查基于 GitHub Releases 的自动更新方案，覆盖更新器选型、发布签名与私有鉴权"
+  default_prompt: "使用 $github-release-updater 分析当前项目，选定更新器并输出基于 GitHub Releases 的自动更新实施方案。"
+
+policy:
+  allow_implicit_invocation: true
