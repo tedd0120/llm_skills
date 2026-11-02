@@ -17,7 +17,7 @@
 
 | 技能标识 (ID) | 核心功能 | 适用触发场景 | 依赖与运行环境 |
 | :--- | :--- | :--- | :--- |
-| **`shadcn-ui-workflow`** | 复用现有组件并结合 shadcn/ui、coss ui、Loading UI、Magic UI、Animate UI 与 assistant-ui 选型，支持 Lucide、Tabler、Phosphor、Hugeicons 图标检索与界面适配验证 | 新增或修改 UI 组件、调整界面样式与交互、搜索图标、添加动效与加载状态、构建 AI 对话界面 | 目标前端项目环境 |
+| **`shadcn-ui-workflow`** | 复用现有组件并结合 shadcn/ui、coss ui、Loading UI、Magic UI、Animate UI 与 assistant-ui 选型，支持 Lucide、Tabler、Phosphor、Hugeicons 图标检索与界面适配验证 | 涉及 UI 设计与界面开发、新增或修改 UI 组件、调整界面样式与交互、搜索图标、添加动效与加载状态、构建 AI 对话界面 | 目标前端项目环境 |
 | **`website-uiux-extractor`** | 采集目标网址可见 UI/UX，提取带页面、视口和交互状态证据的语义视觉令牌，生成 `DESIGN.md`、DTCG tokens JSON、CSS variables、Tailwind CSS v4 theme 与独立预览页 | 用户提供 URL 并要求提取或复刻网站视觉、整理设计系统、制作视觉令牌 | 可交互浏览器、Python 3.10+ |
 
 ### 数据采集与分析

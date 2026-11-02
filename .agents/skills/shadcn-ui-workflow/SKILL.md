@@ -1,9 +1,14 @@
 ---
 name: shadcn-ui-workflow
-description: 新增、修改或替换 UI 组件、调整界面样式与交互、搜索图标、添加动效与加载状态，或构建 AI 助手对话界面时使用；优先复用项目已有组件，结合 shadcn/ui、coss ui、Loading UI、Magic UI、Animate UI 与 assistant-ui 选型，通过常用图标库（Lucide、Tabler、Phosphor、Hugeicons）搜索图标，并按目标项目使用的技术完成适配与验证。纯后端任务不触发。
+description: UI 设计或界面开发，包括新增、修改或替换 UI 组件、调整界面样式与交互、搜索图标、添加动效与加载状态；优先复用项目已有组件，结合 shadcn/ui、coss ui、Loading UI、Magic UI、Animate UI 与 assistant-ui 选型，通过常用图标库（Lucide、Tabler、Phosphor、Hugeicons）搜索图标，并按目标项目使用的技术完成适配与验证。
 ---
 
 # 通用 UI 组件工作流
+
+## UI 设计重点
+
+- 避免过度使用副标题与解释说明语句。
+- 依托 UI 组件本身的排版布局与视觉层级自我解释功能用途。
 
 1. **前置分流与目标定位**
    - 仅搜索图标时，直接读取 [图标库选型与接入](references/icons.md)，检索并交付候选图标名称、官方链接、所属库与推荐理由后结束流程。
