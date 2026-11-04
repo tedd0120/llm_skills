@@ -7,8 +7,6 @@ description: UI 设计或界面开发，包括新增、修改或替换 UI 组件
 
 ## UI 设计重点
 
-- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
-
 1. **前置分流与目标定位**
    - 仅搜索图标时，直接读取 [图标库选型与接入](references/icons.md)，检索并交付候选图标名称、官方链接、所属库与推荐理由后结束流程。
    - 遵循目标项目的代码检索规则、UI 规范与设计令牌文档，确认现有组件、调用方、业务回调和样式入口。只修改文案、间距或颜色时，直接调整现有组件并跳至第 5 步验证。
