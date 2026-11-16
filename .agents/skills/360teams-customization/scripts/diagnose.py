@@ -1,4 +1,3 @@
-"""Read-only Windows proxy evidence. Reports do not include credentials or chat data."""
 import argparse
 from datetime import datetime
 import json
@@ -45,7 +44,7 @@ def probe(url, proxy):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='读取 360Teams 系统代理与连接证据')
     parser.add_argument('--output-dir')
     parser.add_argument('--proxy', help='Explicit HTTP/SOCKS URL without credentials')
     parser.add_argument('--probe-url', default='https://sk.360teams.com/nsf.gif')

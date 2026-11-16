@@ -1,0 +1,4 @@
+interface:
+  display_name: "360Teams 自定义修改"
+  short_description: "自定义修改 360Teams 功能，支持代理修复、QWork 与 AI 灵记启停"
+  default_prompt: "使用 $360teams-customization 检查当前客户端，并修改我指定的功能。"

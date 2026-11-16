@@ -1,8 +1,7 @@
-"""Resolve this skill's artifacts and local state independently of cwd."""
 import os
 from pathlib import Path
 
-NAME = '360teams-proxy-repair'
+NAME = '360teams-customization'
 
 
 def directory(kind, explicit=None):

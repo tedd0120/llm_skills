@@ -30,6 +30,7 @@ xhs_auth.json
 .token_cache.json
 
 # Python
+node_modules/
 __pycache__/
 *.py[cod]
 *$py.class

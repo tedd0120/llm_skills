@@ -35,7 +35,7 @@
 | :--- | :--- | :--- | :--- |
 | **`teams-attendance`** | 获取 360Teams 考勤明细，计算有效工作日、平均工时与目标达标预测 | 用户查询个人考勤明细、累计工时、工时达标预测 | `TEAMS_EM_CODE`<br>`TEAMS_AUTHORIZATION` |
 | **`teams-group-members`** | 获取 360Teams 群组成员并支持多群并集去重，导出标准 JSON 与单文件交互式组织架构树 HTML | 用户需要获取群组成员名单、生成组织架构树 HTML | `TEAMS_AUTHORIZATION`<br>`TEAMS_GROUP_CODES` |
-| **`360teams-proxy-repair`** | 检测 Windows 360Teams 是否使用系统代理，诊断待办“非内网办公环境”，在确认客户端强制直连时应用或还原可回滚补丁 | 360Teams 待办提示非内网环境、检测或修复客户端代理转发链路 | Windows、Python 3.10+ |
+| **`360teams-customization`** | 自定义修改 360Teams，支持系统代理修复、QWork 与 AI 灵记独立启停，以及其他本地功能的补丁分析与恢复 | 修改 360Teams 功能、诊断代理端口、停用或启用内置模块 | Windows、Node.js 22.12+；代理诊断另需 Python 3.10+ |
 | **`git-weekly-summary`** | 汇总本周一 00:00 至当前时刻的 Git 提交，按功能模块生成面向非技术读者的精炼中文周报 | 用户显式调用 `$git-weekly-summary` | Git |
 
 ### 研发工作流与工程方法
