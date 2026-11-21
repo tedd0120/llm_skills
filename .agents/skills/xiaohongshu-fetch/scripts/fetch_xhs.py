@@ -103,6 +103,7 @@ class XHSScraper:
         self.safe_mode = safe_mode
         self.speed_mode = speed_mode
         self.auth_state_path = AUTH_STATE_PATH
+        self.debug_dir = None
         self.dropped_id_mismatch = 0
 
         # 启动模式横幅
@@ -279,10 +280,13 @@ class XHSScraper:
                 )
                 print(f"[✓] ID-URL 映射 → {map_file}", flush=True)
 
-    @staticmethod
-    def _save_debug_screenshot(page: Page, label: str):
+    def _save_debug_screenshot(self, page: Page, label: str):
+        if self.debug_dir is None:
+            return
         try:
-            path = Path(f"xhs_debug_{label}_{int(time.time())}.png")
+            self.debug_dir.mkdir(parents=True, exist_ok=True)
+            label = "".join(c if c.isalnum() or c in " _-" else "_" for c in label)
+            path = self.debug_dir / f"xhs_debug_{label}_{time.time_ns()}.png"
             page.screenshot(path=str(path))
             print(f"[DEBUG] 截图已保存: {path}", flush=True)
         except Exception:
@@ -360,6 +364,7 @@ class XHSScraper:
         return browser, ctx, page
 
     def run(self, keywords: list, output_file: str = ""):
+        self.debug_dir = Path(output_file).resolve().parent / "debug" if output_file else None
         with sync_playwright() as pw:
             # 1) 搜索 + 抓取（strategy 优先，回收策略兜底）
             #    每个关键词独立开关浏览器，规避同页连续搜索触发的风控

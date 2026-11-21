@@ -18,6 +18,7 @@ OUTPUT_DIR = <仓库根目录绝对路径>/data/xiaohongshu/YYYYMMDD_HHmmSS_主�
 - 传给任何脚本或子组件时，OUTPUT_DIR **必须使用绝对路径**。
 - 禁止在 `.agents/skills/` 下创建 data 目录或写入运行产物。
 - 时间戳必须使用当前系统真实时间；报告文件固定为 `{OUTPUT_DIR}/{主题}.md`。
+- 所有 `xhs_debug_*.png` 调试截图保存到 `{OUTPUT_DIR}/debug/`，同一主题的各轮抓取共用此目录。
 
 ---
 
